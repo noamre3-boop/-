@@ -7,18 +7,40 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Find project folder
+        run: |
+          FILE=$(find . -name settings.gradle -not -path './.git/*' | head -1)
+          if [ -z "$FILE" ]; then
+            echo "settings.gradle not found - upload all project files to the repo"
+            find . -maxdepth 3 -not -path './.git*'
+            exit 1
+          fi
+          DIR=$(dirname "$FILE")
+          echo "Project folder: $DIR"
+          if [ ! -f "$DIR/tools/build_data.py" ]; then
+            echo "tools/build_data.py is missing - upload the tools folder too"
+            find . -maxdepth 3 -not -path './.git*'
+            exit 1
+          fi
+          echo "PROJ=$DIR" >> $GITHUB_ENV
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.9'
-      - name: Build Pokemon database (all Pokemon from PokeAPI)
-        run: python3 tools/build_data.py
+
+      - name: Build Pokemon database
+        run: python3 "$PROJ/tools/build_data.py"
+
       - name: Build APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+        run: cd "$PROJ" && gradle assembleDebug --no-daemon --stacktrace
+
       - uses: actions/upload-artifact@v4
         with:
           name: PokeScan-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: ${{ env.PROJ }}/app/build/outputs/apk/debug/*.apk
