@@ -8,21 +8,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Unzip project if needed
+        run: |
+          if [ -z "$(find . -name settings.gradle -not -path './.git/*' | head -1)" ]; then
+            ZIP=$(ls *.zip 2>/dev/null | head -1)
+            if [ -n "$ZIP" ]; then
+              echo "Unzipping $ZIP"
+              unzip -q -o "$ZIP" -d unzipped
+            fi
+          fi
+
       - name: Find project folder
         run: |
           FILE=$(find . -name settings.gradle -not -path './.git/*' | head -1)
           if [ -z "$FILE" ]; then
-            echo "settings.gradle not found - upload all project files to the repo"
-            find . -maxdepth 3 -not -path './.git*'
+            echo "settings.gradle not found"
+            find . -maxdepth 4 -not -path './.git*'
             exit 1
           fi
           DIR=$(dirname "$FILE")
           echo "Project folder: $DIR"
-          if [ ! -f "$DIR/tools/build_data.py" ]; then
-            echo "tools/build_data.py is missing - upload the tools folder too"
-            find . -maxdepth 3 -not -path './.git*'
-            exit 1
-          fi
           echo "PROJ=$DIR" >> $GITHUB_ENV
 
       - uses: actions/setup-java@v4
