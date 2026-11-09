@@ -1,7 +1,29 @@
-import { courseById, courses, grades } from '../data/courses';
-import { program, requirementGroups, semesterById, semesters } from '../data/program';
-import type { CategoryId, Course, CourseStatus, RequirementGroup, Semester, Term } from '../types';
-import { fromMinutes, monthYear, toMinutes } from './format';
+import { courseById, courses } from '../data/courses';
+import { engine } from '../data/demo';
+import { program, requirementGroups, semesterById, semesterFor, semesters } from '../data/program';
+import {
+  type Audit,
+  type ConditionResult,
+  type CourseRecord,
+  type Issue as EngineIssue,
+  type Plan,
+  type PlanningPrefs,
+  type RecommendationSet,
+  type RiskReport,
+  type RuleResult,
+  findConflicts as engineConflicts,
+  offeredText as engineOfferedText,
+} from '../engine';
+import type { Course, CourseStatus, RequirementGroup, Semester } from '../types';
+import { monthYear } from './format';
+
+/**
+ * UI adapter over the academic engine (src/engine).
+ *
+ * The UI works with "placements": one term per course, covering history (the term a course was
+ * passed/failed/taken) and the student's plan (future terms). The engine works with an
+ * immutable student record plus a plan of future placements; this module translates between them.
+ */
 
 /** courseId → semesterId. Courses not in the map are unscheduled. */
 export type Placements = Record<string, string>;
@@ -16,45 +38,130 @@ export interface PlanPrefs {
 
 export const defaultPrefs: PlanPrefs = { preferredMaxCredits: 20, heavyWorkloadHours: 45, includeSummer: true };
 
-const semesterIndex = Object.fromEntries(semesters.map((s, i) => [s.id, i])) as Record<string, number>;
+const toEnginePrefs = (p: PlanPrefs): PlanningPrefs => ({
+  maxCredits: p.preferredMaxCredits,
+  heavyWorkloadHours: p.heavyWorkloadHours,
+  includeSummer: p.includeSummer,
+});
+
+const { history, catalog, calendar } = engine;
+
+export const semesterIndex = Object.fromEntries(semesters.map((s, i) => [s.id, i])) as Record<string, number>;
 export const futureSemesters = semesters.filter((s) => s.status === 'future');
 export const currentSemester = semesters.find((s) => s.status === 'current')!;
 export const nextSemester = futureSemesters[0];
 
 export const isEditableSemester = (id: string | undefined | null) => !!id && semesterById[id]?.status === 'future';
 
+/** The engine plan: future placements of courses that aren't already completed or in progress. */
+export function toPlan(placements: Placements): Plan {
+  const plan: Plan = {};
+  for (const [id, sem] of Object.entries(placements)) {
+    if (!catalog.has(id) || calendar.status(sem) !== 'future') continue;
+    const rec = history.get(id);
+    if (rec && (rec.status === 'passed' || rec.status === 'exempt' || rec.status === 'transfer' || rec.status === 'in-progress')) continue;
+    plan[id] = sem;
+  }
+  return plan;
+}
+
 // ── Course status ───────────────────────────────────────────────────────────
 
+/** Courses no program group accepts (e.g. preparatory courses). */
+const outsideProgram = new Set(
+  catalog.courses
+    .filter((c) => !engine.program.groups.some((g) => catalog.matches(c.id, g.pool) || g.rules.some((r) => r.type === 'course' && (r.course === c.id || r.alternatives?.includes(c.id)))))
+    .map((c) => c.id),
+);
+
+export function courseRecord(courseId: string): CourseRecord | undefined {
+  return history.get(courseId);
+}
+
 export function courseStatus(courseId: string, placements: Placements): CourseStatus {
-  const sem = semesterById[placements[courseId]];
-  if (!sem) return 'unscheduled';
-  if (sem.status === 'completed') return 'completed';
-  if (sem.status === 'current') return 'in-progress';
-  return 'planned';
+  const rec = history.get(courseId);
+  const planned = !!placements[courseId] && semesterById[placements[courseId]]?.status === 'future';
+  if (rec) {
+    switch (rec.status) {
+      case 'passed':
+        return outsideProgram.has(courseId) ? 'not-counted' : 'completed';
+      case 'exempt':
+      case 'transfer':
+        return 'exempt';
+      case 'duplicate':
+        return 'not-counted';
+      case 'in-progress':
+        return 'in-progress';
+      case 'failed':
+        return planned ? 'planned' : 'failed';
+      case 'withdrawn':
+        return planned ? 'planned' : 'unscheduled';
+    }
+  }
+  return planned ? 'planned' : 'unscheduled';
+}
+
+/** Display grade for a course: number, "Pass", "Exempt", "Recognized" or null. */
+export function gradeLabel(courseId: string): string | null {
+  const rec = history.get(courseId);
+  if (!rec) return null;
+  if (rec.status === 'exempt') return 'Exempt';
+  if (rec.status === 'transfer') return 'Recognized';
+  if (rec.grade === 'pass') return 'Pass';
+  if (rec.grade === 'fail') return 'Fail';
+  return typeof rec.grade === 'number' ? String(rec.grade) : null;
 }
 
 export function coursesIn(semesterId: string, placements: Placements): Course[] {
   return courses.filter((c) => placements[c.id] === semesterId);
 }
 
+/** Every graded or in-progress attempt in a term (including failed attempts that were later retaken). */
+export function attemptsIn(semesterId: string) {
+  return engine.student.attempts
+    .filter((a) => a.termId === semesterId && catalog.has(a.courseId))
+    .map((a) => ({ ...a, course: courseById[a.courseId] }));
+}
+
+/** Credits recognized without a term (prior studies). */
+export const priorCredits = [...history.records.values()]
+  .filter((r) => (r.status === 'transfer' || r.status === 'exempt') && !r.termId)
+  .reduce((a, r) => a + r.credits, 0);
+
+/** True when this course or an equivalent already earned credit, so taking it would not count. */
+export function alreadyCovered(courseId: string) {
+  return [...catalog.equivalenceClass(courseId)].some((id) => {
+    const r = history.get(id);
+    return !!r && (r.status === 'passed' || r.status === 'transfer' || r.status === 'exempt');
+  });
+}
+
+/** Courses a student could still add to the plan: not taken (or failed), part of the program, not redundant. */
+export function isPlannable(courseId: string, placements: Placements) {
+  const s = courseStatus(courseId, placements);
+  return (s === 'unscheduled' || s === 'failed') && !outsideProgram.has(courseId) && !alreadyCovered(courseId);
+}
+
 export const isMovable = (courseId: string, placements: Placements) => {
   const status = courseStatus(courseId, placements);
-  return status === 'planned' || status === 'unscheduled';
+  return status === 'planned' || status === 'unscheduled' || status === 'failed';
 };
 
 // ── Progress ────────────────────────────────────────────────────────────────
 
 export interface GroupProgress {
   group: RequirementGroup;
+  /** Display values, capped at the group requirement. */
   completed: number;
   inProgress: number;
   planned: number;
-  /** Credits still needed that are not yet in any semester. */
   unplanned: number;
-  /** Credits still needed before the requirement is complete (in progress + planned + unplanned). */
   remaining: number;
   completedPct: number;
   courses: Course[];
+  rules: RuleResult[];
+  satisfied: boolean;
+  covered: boolean;
 }
 
 export interface DegreeSummary {
@@ -70,288 +177,148 @@ export interface DegreeSummary {
   inProgressCourses: number;
   plannedCourses: number;
   groups: GroupProgress[];
+  conditions: ConditionResult[];
+  eligible: boolean;
+  projectedEligible: boolean;
+  notCounted: Audit['notCounted'];
+}
+
+export function audit(placements: Placements): Audit {
+  return engine.audit(toPlan(placements));
 }
 
 export function summarize(placements: Placements): DegreeSummary {
-  const groups = requirementGroups.map<GroupProgress>((group) => {
-    const groupCourses = courses.filter((c) => c.category === group.id);
-    let completed = 0;
-    let inProgress = 0;
-    let planned = 0;
-    for (const c of groupCourses) {
-      const s = courseStatus(c.id, placements);
-      if (s === 'completed') completed += c.credits;
-      else if (s === 'in-progress') inProgress += c.credits;
-      else if (s === 'planned') planned += c.credits;
-    }
-    // Credits beyond what the group requires don't reduce other groups' needs.
-    const req = group.requiredCredits;
-    const cCompleted = Math.min(completed, req);
-    const cInProgress = Math.min(inProgress, req - cCompleted);
-    const cPlanned = Math.min(planned, req - cCompleted - cInProgress);
-    const unplanned = Math.max(0, req - cCompleted - cInProgress - cPlanned);
+  const a = audit(placements);
+  const groups = a.groups.map<GroupProgress>((g) => {
+    const req = g.group.minCredits;
+    const completed = Math.min(g.completed, req);
+    const inProgress = Math.min(g.inProgress, req - completed);
+    const planned = Math.min(g.planned, req - completed - inProgress);
     return {
-      group,
-      completed: cCompleted,
-      inProgress: cInProgress,
-      planned: cPlanned,
-      unplanned,
-      remaining: req - cCompleted,
-      completedPct: (cCompleted / req) * 100,
-      courses: groupCourses,
+      group: requirementGroups.find((r) => r.id === g.group.id)!,
+      completed,
+      inProgress,
+      planned,
+      unplanned: g.unplanned,
+      remaining: g.remaining,
+      completedPct: (completed / req) * 100,
+      courses: courses.filter((c) => catalog.matches(c.id, g.group.pool)),
+      rules: g.rules,
+      satisfied: g.satisfied,
+      covered: g.covered,
     };
   });
-
-  const sum = (k: 'completed' | 'inProgress' | 'planned' | 'unplanned') => groups.reduce((a, g) => a + g[k], 0);
-  const completed = sum('completed');
-  const inProgress = sum('inProgress');
-  const planned = sum('planned');
-  const unplanned = sum('unplanned');
-
-  let gradeCredits = 0;
-  let gradePoints = 0;
-  for (const [id, g] of Object.entries(grades)) {
-    if (courseStatus(id, placements) !== 'completed') continue;
-    gradeCredits += courseById[id].credits;
-    gradePoints += courseById[id].credits * g;
-  }
 
   const count = (s: CourseStatus) => courses.filter((c) => courseStatus(c.id, placements) === s).length;
 
   return {
-    total: program.totalCredits,
-    completed,
-    inProgress,
-    planned,
-    unplanned,
-    remaining: program.totalCredits - completed,
-    completedPct: (completed / program.totalCredits) * 100,
-    average: gradeCredits ? gradePoints / gradeCredits : 0,
-    completedCourses: count('completed'),
+    total: a.totals.required,
+    completed: a.totals.completed,
+    inProgress: a.totals.inProgress,
+    planned: a.totals.planned,
+    unplanned: a.totals.unplanned,
+    remaining: a.totals.remaining,
+    completedPct: (a.totals.completed / a.totals.required) * 100,
+    average: history.average ?? 0,
+    completedCourses: count('completed') + count('exempt'),
     inProgressCourses: count('in-progress'),
     plannedCourses: count('planned'),
     groups,
+    conditions: a.conditions,
+    eligible: a.eligible,
+    projectedEligible: a.projectedEligible,
+    notCounted: a.notCounted,
   };
 }
 
 // ── Rule checks ─────────────────────────────────────────────────────────────
 
-export type IssueKind = 'missing-course' | 'missing-credits' | 'prerequisite' | 'not-offered' | 'conflict' | 'overload';
-
-export interface Issue {
-  id: string;
-  kind: IssueKind;
-  severity: 'critical' | 'warning';
-  semesterId?: string;
-  courseIds: string[];
-  groupId?: CategoryId;
-  title: string;
-  detail: string;
-}
-
-const termLabel: Record<Term, string> = { fall: 'fall', spring: 'spring', summer: 'summer' };
+export type IssueKind = EngineIssue['kind'];
+export type Issue = EngineIssue & { semesterId?: string };
 
 export function offeredText(c: Course) {
-  if (c.offered.length === 3) return 'every term';
-  const terms = c.offered.map((t) => termLabel[t]);
-  return c.offered.length === 1 ? `${terms[0]} only` : terms.join(' & ');
+  return engineOfferedText(c.offered);
 }
 
-export interface Conflict {
-  a: string;
-  b: string;
-  day: string;
-  start: string;
-  end: string;
+export function findConflicts(courseIds: string[]) {
+  return engineConflicts(courseIds, catalog);
 }
 
-export function findConflicts(courseIds: string[]): Conflict[] {
-  const out: Conflict[] = [];
-  for (let i = 0; i < courseIds.length; i++) {
-    for (let j = i + 1; j < courseIds.length; j++) {
-      const a = courseById[courseIds[i]];
-      const b = courseById[courseIds[j]];
-      for (const sa of a.schedule) {
-        for (const sb of b.schedule) {
-          if (sa.day !== sb.day) continue;
-          const start = Math.max(toMinutes(sa.start), toMinutes(sb.start));
-          const end = Math.min(toMinutes(sa.end), toMinutes(sb.end));
-          if (start < end) out.push({ a: a.id, b: b.id, day: sa.day, start: fromMinutes(start), end: fromMinutes(end) });
-        }
-      }
-    }
-  }
-  return out;
-}
-
-/** Prerequisites that are not completed or scheduled strictly before `semesterId`. */
+/** Human-readable unmet prerequisites for taking `courseId` in `semesterId` (empty when allowed). */
 export function unmetPrerequisites(courseId: string, semesterId: string, placements: Placements): string[] {
-  const idx = semesterIndex[semesterId];
-  return courseById[courseId].prerequisites.filter((p) => {
-    const at = placements[p];
-    return at === undefined || semesterIndex[at] >= idx;
-  });
+  const check = engine.prerequisites(courseId, semesterId, toPlan(placements));
+  return check.state === 'unmet' ? check.missing : [];
 }
 
 export function checkPlan(placements: Placements): Issue[] {
-  const issues: Issue[] = [];
-  const summary = summarize(placements);
-
-  // Mandatory courses missing from the plan.
-  for (const c of courses) {
-    if (c.mandatory && !placements[c.id]) {
-      issues.push({
-        id: `missing-${c.id}`,
-        kind: 'missing-course',
-        severity: 'critical',
-        courseIds: [c.id],
-        groupId: c.category,
-        title: `${c.name} is required but not planned`,
-        detail: `${c.code} (${c.credits} credits) is mandatory and offered ${offeredText(c)}.`,
-      });
-    }
-  }
-
-  // Requirement groups whose credits are not fully covered by mandatory gaps above.
-  for (const g of summary.groups) {
-    const missingMandatory = courses
-      .filter((c) => c.category === g.group.id && c.mandatory && !placements[c.id])
-      .reduce((a, c) => a + c.credits, 0);
-    const extra = g.unplanned - missingMandatory;
-    if (extra > 0) {
-      issues.push({
-        id: `credits-${g.group.id}-${extra}`,
-        kind: 'missing-credits',
-        severity: 'critical',
-        courseIds: [],
-        groupId: g.group.id,
-        title: `${extra} ${g.group.shortName.toLowerCase()} credits not yet planned`,
-        detail: `${g.group.name} needs ${g.group.requiredCredits} credits. Add courses to cover the remaining ${extra}.`,
-      });
-    }
-  }
-
-  for (const sem of semesters) {
-    if (sem.status !== 'future') continue;
-    const ids = coursesIn(sem.id, placements).map((c) => c.id);
-
-    for (const id of ids) {
-      const c = courseById[id];
-      const unmet = unmetPrerequisites(id, sem.id, placements);
-      if (unmet.length) {
-        issues.push({
-          id: `prereq-${id}-${sem.id}`,
-          kind: 'prerequisite',
-          severity: 'critical',
-          semesterId: sem.id,
-          courseIds: [id, ...unmet],
-          title: `Prerequisite not met: ${c.name}`,
-          detail: `Requires ${unmet.map((p) => courseById[p].name).join(', ')} in an earlier semester.`,
-        });
-      }
-      if (!c.offered.includes(sem.term)) {
-        issues.push({
-          id: `offered-${id}-${sem.id}`,
-          kind: 'not-offered',
-          severity: 'critical',
-          semesterId: sem.id,
-          courseIds: [id],
-          title: `${c.name} isn’t offered in ${sem.term}`,
-          detail: `${c.code} runs ${offeredText(c)}. Move it to a semester where it is offered.`,
-        });
-      }
-    }
-
-    for (const cf of findConflicts(ids)) {
-      issues.push({
-        id: `conflict-${cf.a}-${cf.b}-${sem.id}`,
-        kind: 'conflict',
-        severity: 'warning',
-        semesterId: sem.id,
-        courseIds: [cf.a, cf.b],
-        title: `Schedule conflict in ${sem.label}`,
-        detail: `${courseById[cf.a].name} and ${courseById[cf.b].name} overlap on ${cf.day} ${cf.start}–${cf.end}.`,
-      });
-    }
-
-    const credits = ids.reduce((a, id) => a + courseById[id].credits, 0);
-    if (credits > program.maxCreditsPerSemester) {
-      issues.push({
-        id: `overload-${sem.id}-${credits}`,
-        kind: 'overload',
-        severity: 'critical',
-        semesterId: sem.id,
-        courseIds: ids,
-        title: `${sem.label} exceeds the credit limit`,
-        detail: `${credits} credits planned; the program allows up to ${program.maxCreditsPerSemester} without approval.`,
-      });
-    }
-  }
-
-  const rank = { critical: 0, warning: 1 };
-  return issues.sort((a, b) => rank[a.severity] - rank[b.severity]);
+  return engine.validate(toPlan(placements)).map((i) => ({ ...i, semesterId: i.termId }));
 }
 
 // ── Graduation projection ───────────────────────────────────────────────────
 
 export interface Projection {
   status: 'on-track' | 'at-risk' | 'delayed';
-  /** Semester the plan finishes in. */
+  /** Term the plan (or, if the plan is incomplete, the earliest feasible schedule) finishes in. */
   semester: Semester;
   label: string;
   date: string;
   target: Semester;
-  /** Semesters later than the target (0 when on time). */
   semestersLate: number;
   reason: string;
+  /** Earliest feasible graduation from the forecast engine, independent of the plan's gaps. */
+  earliest?: { label: string; date: string } | null;
 }
 
-/** Semesters beyond the planning horizon, used to estimate the next offering of a course. */
 export function nextOffering(courseId: string, afterSemesterId: string): { label: string; end: string } {
-  const c = courseById[courseId];
-  const last = semesterById[afterSemesterId];
-  const order: Term[] = ['spring', 'summer', 'fall'];
-  let term = last.term;
-  let year = last.year;
-  for (let i = 0; i < 9; i++) {
-    const idx = order.indexOf(term);
-    term = order[(idx + 1) % 3];
-    if (term === 'spring') year += 1;
-    if (c.offered.includes(term)) {
-      const known = semesters.find((s) => s.term === term && s.year === year);
-      if (known) return { label: known.label, end: known.end };
-      const end = term === 'spring' ? `${year}-06-25` : term === 'summer' ? `${year}-09-10` : `${year + 1}-02-04`;
-      return { label: `${term[0].toUpperCase()}${term.slice(1)} ${year}`, end };
-    }
-  }
-  return { label: 'a later term', end: last.end };
+  const t = calendar.nextOffering(afterSemesterId, catalog.get(courseId).offered);
+  return t ? { label: t.label, end: t.end } : { label: 'a later term', end: semesterFor(afterSemesterId).end };
 }
 
-export function project(placements: Placements, issues = checkPlan(placements)): Projection {
-  const target = semesterById[program.targetGraduation];
-  let lastIdx = semesterIndex[currentSemester.id];
-  for (const [, semId] of Object.entries(placements)) {
-    lastIdx = Math.max(lastIdx, semesterIndex[semId] ?? -1);
+/** Last term with an in-progress or planned course. */
+function lastActiveTerm(placements: Placements) {
+  let last = currentSemester.id;
+  for (const sem of Object.values(placements)) {
+    if (calendar.status(sem) === 'future' && calendar.isBefore(last, sem)) last = sem;
   }
-  const semester = semesters[lastIdx];
+  return last;
+}
+
+function termsBetween(a: string, b: string) {
+  let n = 0;
+  let t = a;
+  while (calendar.isBefore(t, b) && n < 30) {
+    t = calendar.next(t).id;
+    n++;
+  }
+  return n;
+}
+
+export function project(placements: Placements, issues = checkPlan(placements), prefs: PlanPrefs = defaultPrefs, withForecast = true): Projection {
+  const target = semesterFor(program.targetGraduation);
   const blocking = issues.filter((i) => i.severity === 'critical');
-  const late = Math.max(0, lastIdx - semesterIndex[target.id]);
+  const lastId = lastActiveTerm(placements);
+  const late = calendar.isBefore(target.id, lastId) ? termsBetween(target.id, lastId) : 0;
 
   if (blocking.length) {
-    const unplanned = summarize(placements).unplanned;
+    const forecast = withForecast ? engine.forecast(toPlan(placements), toEnginePrefs(prefs)) : null;
+    const end = forecast?.term ?? null;
+    const semester = semesterFor(end?.id ?? lastId);
+    const unplanned = audit(placements).totals.unplanned;
     return {
       status: 'at-risk',
       semester,
       label: monthYear(semester.end),
       date: semester.end,
       target,
-      semestersLate: late,
+      semestersLate: calendar.isBefore(target.id, semester.id) ? termsBetween(target.id, semester.id) : 0,
       reason:
         unplanned > 0
           ? `${unplanned} required credits are not yet in your plan`
           : `${blocking.length} plan ${blocking.length === 1 ? 'issue needs' : 'issues need'} attention`,
+      earliest: end ? { label: monthYear(end.end), date: end.end } : null,
     };
   }
+  const semester = semesterFor(lastId);
   if (late > 0) {
     return {
       status: 'delayed',
@@ -374,14 +341,31 @@ export function project(placements: Placements, issues = checkPlan(placements)):
   };
 }
 
+// ── Recommendations & risks ─────────────────────────────────────────────────
+
+export function recommendNext(placements: Placements, prefs: PlanPrefs, termId?: string): RecommendationSet {
+  return engine.recommend(toPlan(placements), toEnginePrefs(prefs), termId);
+}
+
+export function riskReport(placements: Placements, prefs: PlanPrefs): RiskReport {
+  return engine.risks(toPlan(placements), toEnginePrefs(prefs));
+}
+
 // ── Semester load ───────────────────────────────────────────────────────────
 
 export interface SemesterLoad {
   semester: Semester;
   courses: Course[];
+  /** Credits earned (completed terms) or attempted (current and future terms). */
   credits: number;
   workload: number;
   issues: Issue[];
+}
+
+function creditsIn(c: Course, semester: Semester) {
+  if (semester.status !== 'completed') return c.credits;
+  const rec = history.get(c.id);
+  return rec && rec.status === 'passed' && rec.termId === semester.id && !outsideProgram.has(c.id) ? rec.credits : 0;
 }
 
 export function semesterLoads(placements: Placements, issues: Issue[]): SemesterLoad[] {
@@ -390,17 +374,27 @@ export function semesterLoads(placements: Placements, issues: Issue[]): Semester
     return {
       semester,
       courses: list,
-      credits: list.reduce((a, c) => a + c.credits, 0),
+      credits: list.reduce((a, c) => a + creditsIn(c, semester), 0),
       workload: list.reduce((a, c) => a + c.workload, 0),
       issues: issues.filter((i) => i.semesterId === semester.id),
     };
   });
 }
 
+/** Credit cap for a semester (summer terms have a lower limit). */
+export function creditLimit(semesterId: string) {
+  return engine.program.maxCreditsPerTerm[calendar.get(semesterId).season];
+}
+
 export function applyMove(placements: Placements, courseId: string, to: string | null): Placements {
   const next = { ...placements };
   if (to) next[courseId] = to;
-  else delete next[courseId];
+  else {
+    // A failed course returns to its failed term; anything else leaves the plan.
+    const rec = history.get(courseId);
+    if (rec?.termId && calendar.status(rec.termId) !== 'future') next[courseId] = rec.termId;
+    else delete next[courseId];
+  }
   return next;
 }
 
@@ -412,23 +406,26 @@ export interface MoveImpact {
 
 /** What would happen if `courseId` moved to `to`? Used for drop-target hints and move menus. */
 export function moveImpact(placements: Placements, courseId: string, to: string | null): MoveImpact {
-  const before = project(placements);
   const next = applyMove(placements, courseId, to);
-  const after = project(next);
+  const before = project(placements, undefined, defaultPrefs, false);
+  const after = project(next, undefined, defaultPrefs, false);
   const problems: string[] = [];
   if (to) {
     const c = courseById[courseId];
-    const sem = semesterById[to];
+    const sem = semesterFor(to);
     if (!c.offered.includes(sem.term)) problems.push(`Not offered in ${sem.term}`);
-    if (unmetPrerequisites(courseId, to, next).length) problems.push('Prerequisite not met');
+    const unmet = unmetPrerequisites(courseId, to, next);
+    if (unmet.length) problems.push(`Requires ${unmet[0]}`);
     const ids = coursesIn(to, next).map((x) => x.id);
     if (findConflicts(ids).some((cf) => cf.a === courseId || cf.b === courseId)) problems.push('Time conflict');
     const credits = ids.reduce((a, id) => a + courseById[id].credits, 0);
-    if (credits > program.maxCreditsPerSemester) problems.push(`${credits} credits — over limit`);
-    const broken = courses.filter(
-      (d) => d.prerequisites.includes(courseId) && next[d.id] && semesterIndex[next[d.id]] <= semesterIndex[to],
-    );
+    if (credits > creditLimit(to)) problems.push(`${credits} credits — over the ${creditLimit(to)}-credit limit`);
+    const broken = catalog
+      .dependents(courseId)
+      .filter((d) => next[d.id] && calendar.status(next[d.id]) === 'future' && !calendar.isBefore(to, next[d.id]));
     if (broken.length) problems.push(`Breaks prerequisite for ${broken[0].name}`);
+    const rec = history.get(courseId);
+    if (rec && (rec.status === 'passed' || rec.status === 'duplicate')) problems.push('Already passed');
   } else if (courseById[courseId].mandatory) {
     problems.push('Required course');
   }
@@ -454,7 +451,5 @@ export function prerequisiteChain(courseId: string): string[] {
 }
 
 export function unlocks(courseId: string): Course[] {
-  return courses.filter((c) => c.prerequisites.includes(courseId));
+  return catalog.dependents(courseId).map((d) => courseById[d.id]);
 }
-
-export { semesterIndex };

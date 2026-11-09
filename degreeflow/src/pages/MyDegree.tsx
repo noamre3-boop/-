@@ -16,13 +16,14 @@ import { Badge } from '../components/ui/Badge';
 import { Card, CardHeader, PageHeader } from '../components/ui/Card';
 import { Segmented } from '../components/ui/Controls';
 import { SegmentedBar } from '../components/ui/Progress';
-import { courseById, courses, grades } from '../data/courses';
+import { courseById, courses } from '../data/courses';
 import { program, semesterById } from '../data/program';
 import { courseStatus, unmetPrerequisites } from '../lib/degree';
 import { cn } from '../lib/format';
 import { Link } from '../lib/router';
 import { useDegree } from '../state/store';
 import { useUI } from '../state/ui';
+import type { CourseStatus } from '../types';
 
 export function MyDegree() {
   const { summary } = useDegree();
@@ -82,8 +83,9 @@ function WhatRemains({ className }: { className?: string }) {
           const Icon = categoryIcon[g.group.id];
           const remainingCourses = g.courses.filter((c) => {
             const s = courseStatus(c.id, placements);
-            return s === 'in-progress' || s === 'planned' || (s === 'unscheduled' && c.mandatory);
+            return s === 'in-progress' || s === 'planned' || ((s === 'unscheduled' || s === 'failed') && c.mandatory);
           });
+          const openRules = g.rules.filter((r) => r.rule.type !== 'course' && r.status !== 'met');
           const complete = g.remaining === 0;
           return (
             <div key={g.group.id} className="rounded-xl border border-line">
@@ -128,14 +130,29 @@ function WhatRemains({ className }: { className?: string }) {
                           <StatusDot status={s} mandatory={c.mandatory} />
                           <span className="min-w-0 flex-1 truncate text-sm text-fg">{c.name}</span>
                           <span className="hidden text-2xs text-subtle sm:inline">
-                            {s === 'unscheduled' ? 'Not in any semester' : semesterById[placements[c.id]].label}
+                            {s === 'unscheduled' ? 'Not in any semester' : s === 'failed' ? 'Failed — retake needed' : semesterById[placements[c.id]].label}
                           </span>
                           <span className="tnum w-10 text-right text-xs text-muted">{c.credits} cr</span>
                         </button>
                       </li>
                     );
                   })}
-                  {g.unplanned - remainingCourses.filter((c) => courseStatus(c.id, placements) === 'unscheduled').reduce((a, c) => a + c.credits, 0) > 0 && (
+                  {openRules.map((r) => (
+                    <li key={r.rule.id} className="flex items-center gap-3 px-4 py-2.5">
+                      {r.status === 'missing' ? (
+                        <CircleDashed className="h-3 w-3 shrink-0 text-danger" />
+                      ) : (
+                        <Circle className="h-3 w-3 shrink-0 text-violet" />
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-sm text-fg">{r.label}</span>
+                      <span className="hidden text-2xs text-subtle sm:inline">{r.detail}</span>
+                    </li>
+                  ))}
+                  {g.unplanned -
+                    remainingCourses
+                      .filter((c) => ['unscheduled', 'failed'].includes(courseStatus(c.id, placements)))
+                      .reduce((a, c) => a + c.credits, 0) >
+                    0 && (
                     <li>
                       <Link
                         to={`/requirements?group=${g.group.id}&status=unscheduled`}
@@ -158,72 +175,75 @@ function WhatRemains({ className }: { className?: string }) {
 }
 
 function GraduationChecklist({ className }: { className?: string }) {
-  const { summary, placements } = useDegree();
-  const mandatory = courses.filter((c) => c.mandatory);
-  const mandatoryDone = mandatory.filter((c) => courseStatus(c.id, placements) === 'completed').length;
-  const mandatoryMissing = mandatory.filter((c) => !placements[c.id]).length;
-  const electives = summary.groups.find((g) => g.group.id === 'elective')!;
-  const project = summary.groups.find((g) => g.group.id === 'project')!;
-  const english = courseStatus('GEN101', placements) === 'completed';
+  const { summary } = useDegree();
 
   type State = 'done' | 'progress' | 'missing';
-  const items: { label: string; detail: string; state: State }[] = [
-    {
-      label: `${program.totalCredits} credits`,
-      detail: `${summary.completed} completed · ${summary.inProgress + summary.planned} in progress or planned`,
-      state: summary.completed >= program.totalCredits ? 'done' : summary.unplanned ? 'missing' : 'progress',
-    },
-    {
-      label: 'All mandatory courses',
-      detail: `${mandatoryDone} of ${mandatory.length} completed${mandatoryMissing ? ` · ${mandatoryMissing} not planned` : ''}`,
-      state: mandatoryDone === mandatory.length ? 'done' : mandatoryMissing ? 'missing' : 'progress',
-    },
-    {
-      label: `${electives.group.requiredCredits} elective credits`,
-      detail: `${electives.completed} completed · ${electives.inProgress + electives.planned} on plan`,
-      state: electives.remaining === 0 ? 'done' : electives.unplanned ? 'missing' : 'progress',
-    },
-    {
-      label: 'Final project approved',
-      detail: project.completed ? 'Approved' : 'Part A in progress · Part B planned',
-      state: project.remaining === 0 ? 'done' : project.unplanned ? 'missing' : 'progress',
-    },
-    {
-      label: `Weighted average ≥ ${program.minAverage}`,
-      detail: `Current average ${summary.average.toFixed(1)}`,
-      state: summary.average >= program.minAverage ? 'done' : 'missing',
-    },
-    {
-      label: 'English proficiency — Advanced',
-      detail: english ? `Completed via Academic English (${grades.GEN101})` : 'Required before graduation',
-      state: english ? 'done' : 'missing',
-    },
-  ];
-
+  const toState = (s: string): State => (s === 'met' ? 'done' : s === 'in-progress' || s === 'planned' ? 'progress' : 'missing');
+  const items = summary.conditions.map((c) => ({
+    id: c.def.id,
+    label: c.def.label,
+    detail: c.detail,
+    state: toState(c.status),
+    groups: c.def.type === 'groups' ? summary.groups : null,
+  }));
   const done = items.filter((i) => i.state === 'done').length;
+
+  const icon = (state: State, size = 'h-4 w-4') =>
+    state === 'done' ? (
+      <CheckCircle2 className={cn('mt-0.5 shrink-0 text-accent', size)} aria-label="Met" />
+    ) : state === 'progress' ? (
+      <Circle className={cn('mt-0.5 shrink-0 text-violet', size)} aria-label="In progress or planned" />
+    ) : (
+      <CircleDashed className={cn('mt-0.5 shrink-0 text-danger', size)} aria-label="Not yet covered" />
+    );
 
   return (
     <Card className={cn('flex flex-col lg:self-start', className)}>
       <CardHeader
         icon={ListChecks}
         title="Graduation requirements"
-        description="Official conditions for awarding the degree"
+        description="Each condition is checked separately"
         action={<span className="tnum text-xs text-muted">{done}/{items.length} met</span>}
       />
-      <ul className="flex-1 space-y-1 p-3 pt-4">
+      <p className="mx-5 mt-4 text-xs text-muted">
+        {summary.eligible ? (
+          <span className="text-accent">Eligible to graduate.</span>
+        ) : summary.projectedEligible ? (
+          'Not eligible yet — you will be once your in-progress and planned courses are passed.'
+        ) : (
+          <span className="text-danger">Not eligible yet, and your plan doesn’t cover every condition.</span>
+        )}
+      </p>
+      <ul className="flex-1 space-y-1 p-3 pt-2">
         {items.map((i) => (
-          <li key={i.label} className="flex items-start gap-3 rounded-lg px-2 py-2.5">
-            {i.state === 'done' ? (
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-label="Met" />
-            ) : i.state === 'progress' ? (
-              <Circle className="mt-0.5 h-4 w-4 shrink-0 text-violet" aria-label="In progress" />
-            ) : (
-              <CircleDashed className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-label="Not yet covered" />
-            )}
-            <div className="min-w-0">
-              <p className={cn('text-sm', i.state === 'done' ? 'text-muted' : 'text-fg')}>{i.label}</p>
-              <p className="mt-0.5 text-xs text-subtle">{i.detail}</p>
+          <li key={i.id} className="rounded-lg px-2 py-2.5">
+            <div className="flex items-start gap-3">
+              {icon(i.state)}
+              <div className="min-w-0">
+                <p className={cn('text-sm', i.state === 'done' ? 'text-muted' : 'text-fg')}>{i.label}</p>
+                <p className="mt-0.5 text-xs text-subtle">{i.detail}</p>
+              </div>
             </div>
+            {i.groups && (
+              <ul className="ml-7 mt-2 space-y-1.5 border-l border-line pl-3">
+                {i.groups.map((g) => {
+                  const state: State = g.satisfied ? 'done' : g.covered ? 'progress' : 'missing';
+                  const open = g.rules.filter((r) => r.status !== 'met').length;
+                  return (
+                    <li key={g.group.id} className="flex items-start gap-2">
+                      {icon(state, 'h-3.5 w-3.5')}
+                      <span className="min-w-0 text-xs">
+                        <span className="text-fg">{g.group.name}</span>
+                        <span className="text-subtle">
+                          {' '}
+                          · {g.completed}/{g.group.requiredCredits} cr{open ? ` · ${open} ${open === 1 ? 'rule' : 'rules'} open` : ''}
+                        </span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </li>
         ))}
       </ul>
@@ -239,7 +259,15 @@ function CourseLists({ className }: { className?: string }) {
   const { placements } = useDegree();
   const [tab, setTab] = useState<'mandatory' | 'electives'>('mandatory');
   const [showCompleted, setShowCompleted] = useState(false);
-  const order = { 'in-progress': 0, planned: 1, unscheduled: 2, completed: 3 } as const;
+  const order: Record<CourseStatus, number> = {
+    'in-progress': 0,
+    planned: 1,
+    failed: 2,
+    unscheduled: 3,
+    completed: 4,
+    exempt: 5,
+    'not-counted': 6,
+  };
   const list = courses
     .filter((c) => (tab === 'mandatory' ? c.mandatory : !c.mandatory && placements[c.id]))
     .sort((a, b) => order[courseStatus(a.id, placements)] - order[courseStatus(b.id, placements)]);
@@ -248,7 +276,7 @@ function CourseLists({ className }: { className?: string }) {
   const options = courses.filter((c) => c.category === 'elective' && !placements[c.id]).length;
 
   return (
-    <Card className={cn('overflow-hidden', className)}>
+    <Card className={cn('overflow-hidden lg:self-start', className)}>
       <CardHeader
         title={tab === 'mandatory' ? 'Mandatory courses' : 'Electives & general studies'}
         description={tab === 'mandatory' ? 'Courses every student must complete' : 'Courses you’ve chosen toward elective and additional credits'}

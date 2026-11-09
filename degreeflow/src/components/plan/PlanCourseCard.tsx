@@ -2,7 +2,7 @@ import { AlertTriangle, Eye, GripVertical, Lock, MoreHorizontal, MoveRight, Plus
 import { type DragEvent, useEffect, useRef } from 'react';
 import { courseById } from '../../data/courses';
 import { semesterById } from '../../data/program';
-import { type Issue, courseStatus, futureSemesters, isMovable, moveImpact } from '../../lib/degree';
+import { type Issue, courseStatus, futureSemesters, gradeLabel, isEditableSemester, isMovable, moveImpact } from '../../lib/degree';
 import { cn } from '../../lib/format';
 import { useDegree } from '../../state/store';
 import { useUI } from '../../state/ui';
@@ -57,7 +57,7 @@ export function PlanCourseCard({
           onSelect: () => moveCourse(courseId, s.id),
         };
       }),
-    ...(placements[courseId]
+    ...(isEditableSemester(placements[courseId])
       ? [
           {
             key: 'remove',
@@ -109,6 +109,7 @@ export function PlanCourseCard({
             <span className="font-mono text-2xs text-subtle">{c.code}</span>
             {status === 'in-progress' && <span className="h-1.5 w-1.5 rounded-full bg-violet" aria-label="In progress" />}
             {c.mandatory && <span className="text-2xs text-subtle">· Required</span>}
+            {status === 'failed' && <span className="text-2xs text-danger">· Failed ({gradeLabel(courseId)})</span>}
           </span>
           <span className="mt-0.5 block text-sm font-medium leading-snug text-fg">{c.name}</span>
           <span className="mt-1.5 flex items-center gap-3">

@@ -2,13 +2,17 @@ import { AlertTriangle, ArrowRight, CalendarClock, ChevronDown, Clock, Gauge, Lo
 import { courseById } from '../../data/courses';
 import { semesterById } from '../../data/program';
 import {
+  courseRecord,
   courseStatus,
   futureSemesters,
+  gradeLabel,
+  isEditableSemester,
   isMovable,
   moveImpact,
   offeredText,
   unlocks,
 } from '../../lib/degree';
+import { semesterFor } from '../../data/program';
 import { cn } from '../../lib/format';
 import { navigate } from '../../lib/router';
 import { useDegree } from '../../state/store';
@@ -18,7 +22,6 @@ import { Button } from '../ui/Button';
 import { Menu, type MenuItem } from '../ui/Controls';
 import { Drawer, DrawerClose } from '../ui/Overlay';
 import { CategoryTag, StatusBadge, StatusDot } from './meta';
-import { grades } from '../../data/courses';
 
 export function CourseDrawer() {
   const { courseId, closeCourse, openCourse } = useUI();
@@ -61,8 +64,11 @@ function CourseDetail({
   const status = courseStatus(c.id, placements);
   const sem = semesterById[placements[c.id]];
   const movable = isMovable(c.id, placements);
-  const grade = status === 'completed' ? grades[c.id] : undefined;
+  const rec = courseRecord(c.id);
+  const grade = gradeLabel(c.id);
+  const gradedAttempts = rec?.attempts.filter((a) => a.status === 'graded') ?? [];
   const unlocked = unlocks(c.id);
+  const planned = isEditableSemester(placements[c.id]);
 
   const moveItems: MenuItem[] = [
     ...futureSemesters.map((s) => {
@@ -80,7 +86,7 @@ function CourseDetail({
         onSelect: () => moveCourse(c.id, s.id),
       };
     }),
-    ...(placements[c.id]
+    ...(planned
       ? [
           {
             key: 'none',
@@ -118,14 +124,58 @@ function CourseDetail({
       </div>
 
       <div className="flex-1 space-y-7 overflow-y-auto px-6 py-6">
-        {grade !== undefined && (
-          <div className="flex items-center justify-between rounded-xl border border-line bg-raised/40 px-4 py-3">
-            <div>
-              <p className="text-xs text-muted">Final grade</p>
-              <p className="text-xs text-subtle">{sem?.label}</p>
+        {(grade !== null || rec?.exemption) && (
+          <div className="rounded-xl border border-line bg-raised/40 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted">
+                  {rec?.exemption
+                    ? rec.status === 'transfer'
+                      ? 'Recognized prior studies'
+                      : 'Exemption'
+                    : status === 'failed'
+                      ? 'Last grade'
+                      : status === 'in-progress'
+                        ? 'Previous grade'
+                        : 'Final grade'}
+                </p>
+                <p className="text-xs text-subtle">
+                  {rec?.exemption
+                    ? `${rec.exemption.source} · ${rec.credits} credits`
+                    : status === 'not-counted'
+                      ? 'Doesn’t count toward this degree'
+                      : rec?.termId
+                        ? semesterFor(rec.termId).label
+                        : ''}
+                </p>
+              </div>
+              <p className={cn('text-3xl font-semibold tracking-tight', status === 'failed' ? 'text-danger' : 'text-fg')}>
+                {grade ?? '—'}
+              </p>
             </div>
-            <p className="text-3xl font-semibold tracking-tight text-fg">{grade}</p>
+            {gradedAttempts.length > 1 && (
+              <ul className="mt-3 space-y-1 border-t border-line pt-3">
+                {gradedAttempts.map((a) => (
+                  <li key={a.termId} className="flex items-center justify-between text-xs">
+                    <span className="text-muted">
+                      {semesterFor(a.termId).label}
+                      {a === rec?.counted && <span className="ml-1.5 text-subtle">· counts</span>}
+                    </span>
+                    <span className={cn('tnum', typeof a.grade === 'number' && a.grade < c.passingGrade ? 'text-danger' : 'text-fg')}>
+                      {a.grade === 'pass' ? 'Pass' : a.grade}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
+        )}
+
+        {c.alternativeTo && (
+          <p className="rounded-xl border border-line px-4 py-3 text-xs leading-relaxed text-muted">
+            Accepted instead of <span className="text-fg">{courseById[c.alternativeTo].name}</span>. Credit is granted for only one of
+            the two.
+          </p>
         )}
 
         <p className="text-sm leading-relaxed text-muted">{c.description}</p>
@@ -185,6 +235,9 @@ function CourseDetail({
 
         <section>
           <h3 className="eyebrow mb-3">Prerequisites</h3>
+          {/(\bor\b|≥|credits)/.test(c.prereqText) && (
+            <p className="mb-2 text-xs leading-relaxed text-subtle">Rule: {c.prereqText}</p>
+          )}
           {c.prerequisites.length === 0 ? (
             <p className="text-sm text-subtle">None — open to all students in the program.</p>
           ) : (
@@ -201,7 +254,17 @@ function CourseDetail({
                       <StatusDot status={ps} mandatory={pc.mandatory} />
                       <span className="min-w-0 flex-1 truncate text-sm text-fg">{pc.name}</span>
                       <span className="text-2xs text-subtle">
-                        {ps === 'completed' ? `Completed · ${grades[p]}` : ps === 'in-progress' ? 'In progress' : ps === 'planned' ? semesterById[placements[p]].label : 'Not scheduled'}
+                        {ps === 'completed'
+                          ? `Completed · ${gradeLabel(p)}`
+                          : ps === 'exempt'
+                            ? 'Exempt'
+                            : ps === 'failed'
+                              ? `Failed · ${gradeLabel(p)}`
+                              : ps === 'in-progress'
+                                ? 'In progress'
+                                : ps === 'planned'
+                                  ? semesterById[placements[p]].label
+                                  : 'Not scheduled'}
                       </span>
                       <ArrowRight className="h-3.5 w-3.5 text-subtle opacity-0 transition group-hover:opacity-100" />
                     </button>
@@ -242,10 +305,19 @@ function CourseDetail({
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-6 py-4">
         <div className="min-w-0 text-xs text-muted">
           {movable ? (
-            <span>{sem ? `Planned for ${sem.label}` : 'Not in your plan yet'}</span>
+            <span>
+              {planned ? `Planned for ${sem?.label}` : status === 'failed' ? 'Failed — not yet retaken' : 'Not in your plan yet'}
+            </span>
           ) : (
             <span className="inline-flex items-center gap-1.5">
-              <Lock className="h-3 w-3" /> {status === 'completed' ? `Completed in ${sem?.label}` : `In progress · ${sem?.label}`}
+              <Lock className="h-3 w-3" />{' '}
+              {status === 'completed'
+                ? `Completed in ${sem?.label}`
+                : status === 'exempt'
+                  ? 'Exempt — no need to take it'
+                  : status === 'not-counted'
+                    ? 'Taken — doesn’t count toward the degree'
+                    : `In progress · ${sem?.label}`}
             </span>
           )}
         </div>
@@ -267,7 +339,7 @@ function CourseDetail({
               items={moveItems}
               trigger={(p) => (
                 <Button variant="primary" size="sm" icon={MoveRight} iconRight={ChevronDown} {...p}>
-                  {sem ? 'Move' : 'Add to plan'}
+                  {planned ? 'Move' : status === 'failed' ? 'Plan retake' : 'Add to plan'}
                 </Button>
               )}
             />

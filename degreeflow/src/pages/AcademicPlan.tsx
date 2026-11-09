@@ -20,13 +20,17 @@ import { SearchInput, Segmented } from '../components/ui/Controls';
 import { ProgressBar } from '../components/ui/Progress';
 import { EmptyState } from '../components/ui/States';
 import { milestones } from '../data/calendar';
-import { courseById, courses, grades } from '../data/courses';
+import { courseById, courses } from '../data/courses';
 import { program } from '../data/program';
 import {
   type SemesterLoad,
   applyMove,
   moveImpact,
   unmetPrerequisites,
+  attemptsIn,
+  creditLimit,
+  isPlannable,
+  priorCredits,
   futureSemesters,
 } from '../lib/degree';
 import { cn, daysUntil, formatDate, plural, relativeDays } from '../lib/format';
@@ -231,6 +235,7 @@ function SemesterColumn({
   const locked = semester.status !== 'future';
   const isCurrent = semester.status === 'current';
   const isNext = semester.id === futureSemesters[0].id;
+  const limit = creditLimit(semester.id);
 
   const impact = useMemo(
     () => (dragging && !locked && placements[dragging] !== semester.id ? moveImpact(placements, dragging, semester.id) : null),
@@ -238,7 +243,7 @@ function SemesterColumn({
   );
 
   const loadTone =
-    credits > program.maxCreditsPerSemester ? 'danger' : credits > prefs.preferredMaxCredits ? 'warning' : isCurrent ? 'violet' : 'accent';
+    credits > limit ? 'danger' : credits > Math.min(prefs.preferredMaxCredits, limit) ? 'warning' : isCurrent ? 'violet' : 'accent';
   const semIssues = load.issues.filter((i) => i.kind === 'overload');
 
   return (
@@ -289,11 +294,11 @@ function SemesterColumn({
             size="sm"
             label={`${semester.label} credit load`}
             value={credits}
-            max={program.maxCreditsPerSemester}
+            max={limit}
             tone={credits === 0 ? 'neutral' : loadTone}
           />
           <span className="tnum shrink-0 text-2xs text-muted">
-            <span className="font-medium text-fg">{credits}</span>/{program.maxCreditsPerSemester} cr
+            <span className="font-medium text-fg">{credits}</span>/{limit} cr
           </span>
         </div>
         <p className="mt-1.5 text-2xs text-subtle">
@@ -376,7 +381,8 @@ function PastSemesters({ loads }: { loads: SemesterLoad[] }) {
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium text-fg">Completed semesters</span>
           <span className="block text-xs text-muted">
-            {loads.length} semesters · {credits} credits · average {summary.average.toFixed(1)}
+            {loads.length} semesters · {credits + priorCredits} credits{priorCredits ? ` (incl. ${priorCredits} recognized)` : ''} · average{' '}
+            {summary.average.toFixed(1)}
           </span>
         </span>
         <ChevronDown className={cn('h-4 w-4 text-subtle transition-transform', open && 'rotate-180')} />
@@ -390,17 +396,25 @@ function PastSemesters({ loads }: { loads: SemesterLoad[] }) {
                 <span className="tnum text-subtle">{l.credits} cr</span>
               </div>
               <ul className="mt-2 space-y-1">
-                {l.courses.map((c) => (
-                  <li key={c.id}>
-                    <button
-                      onClick={() => openCourse(c.id)}
-                      className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left text-xs text-muted transition hover:bg-raised hover:text-fg"
-                    >
-                      <span className="truncate">{c.name}</span>
-                      <span className="tnum shrink-0 text-fg">{grades[c.id]}</span>
-                    </button>
-                  </li>
-                ))}
+                {attemptsIn(l.semester.id).map((a) => {
+                  const failed = a.status === 'graded' && typeof a.grade === 'number' && a.grade < a.course.passingGrade;
+                  return (
+                    <li key={a.courseId}>
+                      <button
+                        onClick={() => openCourse(a.courseId)}
+                        className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left text-xs text-muted transition hover:bg-raised hover:text-fg"
+                      >
+                        <span className="truncate">
+                          {a.course.name}
+                          {a.course.category === 'preparatory' && <span className="text-subtle"> · not counted</span>}
+                        </span>
+                        <span className={cn('tnum shrink-0', failed ? 'text-danger' : 'text-fg')}>
+                          {a.grade === 'pass' ? 'Pass' : a.grade}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ))}
@@ -436,7 +450,7 @@ function CoursePool({
   const [filter, setFilter] = useState<PoolFilter>('all');
   const next = futureSemesters[0];
 
-  const pool = courses.filter((c) => !placements[c.id]);
+  const pool = courses.filter((c) => isPlannable(c.id, placements));
   const fitsNext = (id: string) => {
     const c = courseById[id];
     return c.offered.includes(next.term) && unmetPrerequisites(id, next.id, applyMove(placements, id, next.id)).length === 0;

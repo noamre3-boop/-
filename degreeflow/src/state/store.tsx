@@ -23,7 +23,8 @@ import { readStorage, removeStorage, writeStorage } from '../lib/storage';
 import type { Alert } from '../types';
 import { useToast } from './toast';
 
-const KEY = 'df:state:v1';
+// v2: engine-backed data model (attempts, exemptions, alternative courses).
+const KEY = 'df:state:v2';
 
 export interface Notifications {
   deadlines: boolean;
@@ -195,7 +196,7 @@ export function DegreeProvider({ children }: { children: ReactNode }) {
   const derived = useMemo(() => {
     const summary = summarize(state.placements);
     const issues = checkPlan(state.placements);
-    const projection = project(state.placements, issues);
+    const projection = project(state.placements, issues, state.prefs);
     const loads = semesterLoads(state.placements, issues);
     const allInsights = generateInsights(state.placements, state.prefs);
     const insights = allInsights.filter((i) => !state.dismissedInsights.includes(i.id));
@@ -254,8 +255,8 @@ export function DegreeProvider({ children }: { children: ReactNode }) {
   const swapCourses = useCallback(
     (remove: string, add: string, semesterId: string) => {
       const next = applyMove(applyMove(state.placements, remove, null), add, semesterId);
-      const before = project(state.placements);
-      const after = project(next);
+      const before = project(state.placements, undefined, state.prefs, false);
+      const after = project(next, undefined, state.prefs, false);
       dispatch({ type: 'plan', placements: next });
       toast({
         title: `Swapped in ${courseById[add].name}`,

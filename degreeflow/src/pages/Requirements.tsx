@@ -1,7 +1,7 @@
 import { ArrowDownUp, Check, SearchX } from 'lucide-react';
 import { useEffect } from 'react';
 import { CourseTable } from '../components/course/CourseTable';
-import { categoryIcon } from '../components/course/meta';
+import { categoryIcon, statusMeta } from '../components/course/meta';
 import { Button } from '../components/ui/Button';
 import { Card, PageHeader } from '../components/ui/Card';
 import { Menu, SearchInput, Segmented } from '../components/ui/Controls';
@@ -19,7 +19,15 @@ type StatusFilter = 'all' | CourseStatus;
 type SortKey = 'status' | 'code' | 'name' | 'credits';
 
 const sortLabels: Record<SortKey, string> = { status: 'Status', code: 'Course code', name: 'Name', credits: 'Credits' };
-const statusOrder: Record<CourseStatus, number> = { 'in-progress': 0, planned: 1, unscheduled: 2, completed: 3 };
+const statusOrder: Record<CourseStatus, number> = {
+  'in-progress': 0,
+  planned: 1,
+  failed: 2,
+  unscheduled: 3,
+  completed: 4,
+  exempt: 5,
+  'not-counted': 6,
+};
 
 export function Requirements() {
   const { params, path } = useRoute();
@@ -135,7 +143,7 @@ export function Requirements() {
       </div>
 
       <Card className="overflow-hidden">
-        <div className="flex flex-col gap-3 border-b border-line p-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 border-b border-line p-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
           <Segmented
             label="Filter by status"
             value={status}
@@ -146,6 +154,9 @@ export function Requirements() {
               { value: 'in-progress', label: 'In progress', count: countFor('in-progress') },
               { value: 'planned', label: 'Planned', count: countFor('planned') },
               { value: 'unscheduled', label: 'Not scheduled', count: countFor('unscheduled') },
+              ...(['failed', 'exempt', 'not-counted'] as const)
+                .filter((s) => countFor(s) > 0)
+                .map((s) => ({ value: s, label: statusMeta[s].label, count: countFor(s) })),
             ]}
           />
           <div className="flex items-center gap-2">

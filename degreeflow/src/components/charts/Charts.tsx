@@ -283,7 +283,7 @@ export function LineChart({
   min?: number;
   max?: number;
   unit?: string;
-  reference?: { value: number; label: string };
+  reference?: { value: number; label: string; align?: 'start' | 'end' };
   format?: (v: number) => string;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
@@ -335,9 +335,9 @@ export function LineChart({
             <g>
               <line x1={M.left} x2={width - M.right} y1={y(reference.value)} y2={y(reference.value)} stroke="rgb(var(--muted))" strokeOpacity={0.5} strokeWidth={1} />
               <text
-                x={width - M.right}
+                x={reference.align === 'start' ? M.left + 4 : width - M.right}
                 y={y(reference.value) < M.top + 14 ? y(reference.value) + 13 : y(reference.value) - 5}
-                textAnchor="end"
+                textAnchor={reference.align === 'start' ? 'start' : 'end'}
                 className="fill-muted text-[10px]"
               >
                 {reference.label}

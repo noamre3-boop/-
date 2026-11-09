@@ -1,7 +1,6 @@
 import { ChevronRight } from 'lucide-react';
-import { grades } from '../../data/courses';
 import { semesterById } from '../../data/program';
-import { type Placements, courseStatus } from '../../lib/degree';
+import { type Placements, courseStatus, gradeLabel } from '../../lib/degree';
 import { cn } from '../../lib/format';
 import { useUI } from '../../state/ui';
 import type { Course } from '../../types';
@@ -67,7 +66,9 @@ export function CourseTable({
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      {status === 'completed' && <span className="tnum text-sm font-medium text-fg">{grades[c.id]}</span>}
+                      {gradeLabel(c.id) && (
+                        <span className={cn('tnum text-sm font-medium', status === 'failed' ? 'text-danger' : 'text-fg')}>{gradeLabel(c.id)}</span>
+                      )}
                       <StatusBadge status={status} mandatory={c.mandatory} />
                     </div>
                   </div>
@@ -91,7 +92,9 @@ export function CourseTable({
                 <td className="hidden whitespace-nowrap px-3 py-3 text-xs text-muted md:table-cell">{sem?.label ?? '—'}</td>
                 <td className="hidden py-3 pl-3 pr-5 text-right md:table-cell">
                   <span className="inline-flex items-center gap-2">
-                    <span className="tnum text-fg">{status === 'completed' ? grades[c.id] : <span className="text-subtle">—</span>}</span>
+                    <span className={cn('tnum', status === 'failed' ? 'text-danger' : 'text-fg')}>
+                      {gradeLabel(c.id) ?? <span className="text-subtle">—</span>}
+                    </span>
                     <ChevronRight className="h-3.5 w-3.5 text-subtle opacity-0 transition group-hover:opacity-100" />
                   </span>
                 </td>

@@ -1,5 +1,6 @@
 import { milestones } from '../data/calendar';
-import { courseById, courses, grades } from '../data/courses';
+import { courseById, courses } from '../data/courses';
+import { engine } from '../data/demo';
 import { program, requirementGroups, semesterById, semesters } from '../data/program';
 import type { Severity } from '../types';
 import {
@@ -9,13 +10,17 @@ import {
   type Projection,
   applyMove,
   checkPlan,
+  courseStatus,
   coursesIn,
+  creditLimit,
   findConflicts,
   futureSemesters,
   nextOffering,
   nextSemester,
   offeredText,
   project,
+  recommendNext,
+  riskReport,
   semesterIndex,
   semesterLoads,
   unmetPrerequisites,
@@ -23,12 +28,12 @@ import {
 import { daysUntil, formatDate, monthYear, relativeDays } from './format';
 
 /**
- * The intelligence layer.
+ * The intelligence layer, built on the academic engine.
  *
- * - `source: 'rule'` insights are confirmed facts derived from the program's degree rules
- *   (missing mandatory courses, prerequisites, offerings, time conflicts, credit limits).
- * - `source: 'ai'` insights are generated recommendations: heuristics over the plan,
- *   workload estimates and sample enrollment history. They are suggestions, not requirements.
+ * - `source: 'rule'` insights are confirmed facts from the program's degree rules: missing
+ *   mandatory courses, uncovered rules, prerequisites, offerings, time conflicts, credit limits.
+ * - `source: 'ai'` insights are generated suggestions: next-term recommendations, what-if
+ *   delay risks from the forecast simulation, workload estimates. They are suggestions, not rules.
  *
  * Everything runs locally on sample data; nothing is sent anywhere.
  */
@@ -46,6 +51,8 @@ export interface Insight {
   severity: Severity;
   title: string;
   body: string;
+  /** Concrete reasons behind a recommendation. */
+  reasons?: string[];
   impact?: string;
   confidence?: 'High' | 'Medium';
   courseIds: string[];
@@ -56,8 +63,7 @@ const firstValidSemester = (courseId: string, placements: Placements) =>
   futureSemesters.find((s) => {
     const c = courseById[courseId];
     if (!c.offered.includes(s.term)) return false;
-    const next = applyMove(placements, courseId, s.id);
-    return unmetPrerequisites(courseId, s.id, next).length === 0;
+    return unmetPrerequisites(courseId, s.id, applyMove(placements, courseId, s.id)).length === 0;
   });
 
 function ruleInsight(issue: Issue, placements: Placements): Insight {
@@ -73,16 +79,19 @@ function ruleInsight(issue: Issue, placements: Placements): Insight {
     case 'missing-course': {
       const id = issue.courseIds[0];
       const sem = firstValidSemester(id, placements);
+      const later = sem ? nextOffering(id, sem.id) : null;
       return {
         ...base,
         topic: 'requirement',
-        body: `${issue.detail} You meet all prerequisites.`,
+        body: `${issue.detail}${sem ? ' You meet all prerequisites.' : ''}`,
+        impact: sem && later ? `If it slips past ${sem.label}, the next run is ${later.label}` : undefined,
         action: sem
           ? { type: 'move', label: `Add to ${sem.label}`, courseId: id, to: sem.id }
           : { type: 'course', label: 'View course', courseId: id },
       };
     }
     case 'missing-credits':
+    case 'missing-rule':
       return {
         ...base,
         topic: 'requirement',
@@ -103,6 +112,8 @@ function ruleInsight(issue: Issue, placements: Placements): Insight {
           : { type: 'course', label: 'View course', courseId: id },
       };
     }
+    case 'duplicate':
+      return { ...base, topic: 'planning', action: { type: 'move', label: 'Remove from plan', courseId: issue.courseIds[0], to: null } };
     case 'conflict':
       return { ...base, topic: 'schedule', action: { type: 'navigate', label: 'Open plan', href: '/plan' } };
     case 'overload':
@@ -110,30 +121,15 @@ function ruleInsight(issue: Issue, placements: Placements): Insight {
   }
 }
 
-/** Find an unscheduled elective that can replace `removeId` in `semesterId` without conflicts. */
-function findSwap(removeId: string, semesterId: string, placements: Placements) {
-  const removed = courseById[removeId];
-  const sem = semesterById[semesterId];
-  const without = applyMove(placements, removeId, null);
-  const others = coursesIn(semesterId, without).map((c) => c.id);
-  return courses.find((c) => {
-    if (c.category !== removed.category || placements[c.id] || c.credits < removed.credits) return false;
-    if (!c.offered.includes(sem.term)) return false;
-    if (unmetPrerequisites(c.id, semesterId, without).length) return false;
-    return findConflicts([...others, c.id]).length === 0;
-  });
-}
-
-function graduationDelayText(courseId: string, semesterId: string) {
-  const next = nextOffering(courseId, semesterId);
-  return { label: next.label, grad: monthYear(next.end) };
-}
-
 export function generateInsights(placements: Placements, prefs: PlanPrefs): Insight[] {
   const issues = checkPlan(placements);
-  const projection = project(placements, issues);
+  const projection = project(placements, issues, prefs);
   const loads = semesterLoads(placements, issues);
   const out: Insight[] = issues.map((i) => ruleInsight(i, placements));
+  // Courses already explained by a confirmed missing-requirement card don't get a second, overlapping AI card.
+  const covered = new Set(
+    issues.filter((i) => i.kind === 'missing-course' || i.kind === 'duplicate').flatMap((i) => i.courseIds),
+  );
 
   // Confirmed: graduation is later than the target.
   if (projection.status === 'delayed') {
@@ -149,69 +145,118 @@ export function generateInsights(placements: Placements, prefs: PlanPrefs): Insi
     });
   }
 
-  // AI: courses on the critical path that should be taken soon.
-  for (const c of courses) {
-    if (!c.mandatory) continue;
-    const at = placements[c.id];
-    if (!at && c.offered.length === 1) {
-      const sem = firstValidSemester(c.id, placements);
-      if (!sem) continue;
-      const later = graduationDelayText(c.id, sem.id);
-      out.push({
-        id: `ai-soon-${c.id}`,
-        source: 'ai',
-        topic: 'take-soon',
-        severity: 'warning',
-        title: `Take ${c.name} in ${sem.label}`,
-        body: `It’s only offered in ${c.offered[0]}. If it slips past ${sem.label}, the next run is ${later.label} — moving graduation to ${later.grad}.`,
-        impact: `Taking it in ${sem.label} keeps graduation in ${monthYear(semesterById[program.targetGraduation].end)}`,
-        confidence: 'High',
-        courseIds: [c.id],
-        action: { type: 'course', label: 'Why this matters', courseId: c.id },
-      });
-    }
-    if (at === nextSemester.id && c.highDemand) {
-      const reg = milestones.find((m) => m.type === 'registration');
-      out.push({
-        id: `ai-demand-${c.id}`,
-        source: 'ai',
-        topic: 'take-soon',
-        severity: 'info',
-        title: `Register for ${c.name} on day one`,
-        body: `In the sample enrollment history this section fills within ~48 hours. It’s mandatory, so a missed seat would push it to ${
-          nextOffering(c.id, at).label
-        }.`,
-        impact: reg ? `Registration opens ${formatDate(reg.date)} · ${relativeDays(reg.date).toLowerCase()}` : undefined,
-        confidence: 'High',
-        courseIds: [c.id],
-        action: { type: 'course', label: 'View course', courseId: c.id },
-      });
-    }
-  }
+  // AI: next-term recommendations from the engine (only what the plan doesn't already contain).
+  const rec = recommendNext(placements, prefs, nextSemester.id);
+  const newPicks = rec.picks.filter((p) => placements[p.courseId] !== rec.term.id);
+  const usedForSwap = new Set<string>();
 
-  // AI: better semester planning — resolve time conflicts with an equivalent elective.
+  // Better planning: resolve a time conflict by swapping an elective for the engine's pick.
   for (const issue of issues) {
-    if (issue.kind !== 'conflict' || !issue.semesterId) continue;
-    const candidate = issue.courseIds.map((id) => courseById[id]).find((c) => !c.mandatory);
-    if (!candidate) continue;
-    const swap = findSwap(candidate.id, issue.semesterId, placements);
-    if (!swap) continue;
-    const slot = swap.schedule[0];
+    if (issue.kind !== 'conflict' || issue.semesterId !== rec.term.id) continue;
+    const removable = issue.courseIds.map((id) => courseById[id]).find((c) => !c.mandatory);
+    if (!removable) continue;
+    const without = coursesIn(issue.semesterId, applyMove(placements, removable.id, null)).map((c) => c.id);
+    const pick = newPicks.find(
+      (p) =>
+        courseById[p.courseId].category === removable.category &&
+        courseById[p.courseId].credits >= removable.credits &&
+        findConflicts([...without, p.courseId]).length === 0,
+    );
+    if (!pick) continue;
+    const add = courseById[pick.courseId];
+    const slot = add.schedule[0];
+    usedForSwap.add(add.id);
     out.push({
-      id: `ai-swap-${candidate.id}-${swap.id}`,
+      id: `ai-swap-${removable.id}-${add.id}`,
       source: 'ai',
       topic: 'planning',
       severity: 'info',
-      title: `Swap ${candidate.name} for ${swap.name}`,
-      body: `${swap.name} (${slot.day} ${slot.start}–${slot.end}) earns the same ${candidate.credits} elective credits and removes the overlap. It builds on topics where your grades are strong.`,
+      title: `Swap ${removable.name} for ${add.name}`,
+      body: `${add.name} (${slot.day} ${slot.start}–${slot.end}) earns the same ${removable.credits} elective credits and removes the overlap.`,
+      reasons: pick.reasons.filter((r) => !r.startsWith('No time conflicts')),
       impact: 'Resolves 1 schedule conflict · graduation unchanged',
       confidence: 'High',
-      courseIds: [candidate.id, swap.id],
-      action: { type: 'swap', label: 'Apply swap', remove: candidate.id, add: swap.id, semesterId: issue.semesterId },
+      courseIds: [removable.id, add.id],
+      action: { type: 'swap', label: 'Apply swap', remove: removable.id, add: add.id, semesterId: issue.semesterId },
     });
   }
 
-  // AI: workload forecast.
+  for (const p of newPicks.filter((x) => !usedForSwap.has(x.courseId) && !covered.has(x.courseId)).slice(0, 2)) {
+    const c = courseById[p.courseId];
+    out.push({
+      id: `ai-rec-${p.courseId}-${rec.term.id}`,
+      source: 'ai',
+      topic: 'take-soon',
+      severity: 'info',
+      title: `Recommended for ${rec.term.label}: ${c.name}`,
+      body: `${c.code} · ${c.credits} credits · ~${c.workload} h/week.`,
+      reasons: p.reasons,
+      confidence: p.kind === 'elective' ? 'Medium' : 'High',
+      courseIds: [p.courseId],
+      action: { type: 'move', label: `Add to ${rec.term.label}`, courseId: p.courseId, to: rec.term.id },
+    });
+  }
+
+  // AI: what could delay graduation (what-if simulations from the forecast engine).
+  const report = riskReport(placements, prefs);
+  const delayRisks = report.risks.filter(
+    (r) => r.delayTerms > 0 && r.delayTerms < 99 && !r.courseIds.some((id) => covered.has(id)),
+  );
+  for (const r of delayRisks.slice(0, 2)) {
+    out.push({
+      id: `ai-risk-${r.id}`,
+      source: 'ai',
+      topic: 'delay',
+      severity: r.kind === 'fail-in-progress' ? 'info' : 'warning',
+      title: r.title,
+      body: r.detail,
+      impact: r.newTerm
+        ? `${r.delayTerms} ${r.delayTerms === 1 ? 'term' : 'terms'} later · ${r.newTerm.label} ends ${monthYear(r.newTerm.end)}`
+        : undefined,
+      confidence: 'High',
+      courseIds: r.courseIds,
+      action: r.courseIds[0] ? { type: 'course', label: 'View course', courseId: r.courseIds[0] } : undefined,
+    });
+  }
+  const infeasible = report.risks.find((r) => r.kind === 'infeasible');
+  if (infeasible) {
+    out.push({
+      id: 'ai-infeasible',
+      source: 'ai',
+      topic: 'delay',
+      severity: 'warning',
+      title: infeasible.title,
+      body: infeasible.detail,
+      courseIds: [],
+      action: { type: 'navigate', label: 'Open plan', href: '/plan' },
+    });
+  }
+
+  // AI: a failing elective grade still in the average (program's latest-grade policy).
+  const h = engine.history;
+  if (h.average !== null && engine.program.failedGradesInAverage) {
+    for (const r of h.records.values()) {
+      if (r.status !== 'failed' || typeof r.grade !== 'number' || courseById[r.courseId].mandatory) continue;
+      if (courseStatus(r.courseId, placements) === 'planned' || usedForSwap.has(r.courseId)) continue;
+      const cr = courseById[r.courseId].credits;
+      const without = (h.average * h.averageCredits - r.grade * cr) / (h.averageCredits - cr);
+      const sem = firstValidSemester(r.courseId, placements);
+      out.push({
+        id: `ai-failed-${r.courseId}`,
+        source: 'ai',
+        topic: 'planning',
+        severity: 'info',
+        title: `${courseById[r.courseId].name} (${r.grade}) is lowering your average`,
+        body: `Under your program’s latest-grade rule, a failing grade stays in the average until the course is passed. Your average is ${h.average.toFixed(1)}; without this grade it would be ${without.toFixed(1)}.`,
+        impact: 'Optional — it’s an elective, so graduation doesn’t depend on it',
+        confidence: 'High',
+        courseIds: [r.courseId],
+        action: sem ? { type: 'move', label: `Plan a retake in ${sem.label}`, courseId: r.courseId, to: sem.id } : undefined,
+      });
+    }
+  }
+
+  // AI: workload forecast for planned semesters.
   const pastLoads = loads.filter((l) => l.semester.status === 'completed' && l.courses.length);
   const avgPast = pastLoads.reduce((a, l) => a + l.workload, 0) / Math.max(1, pastLoads.length);
   for (const load of loads) {
@@ -219,7 +264,6 @@ export function generateInsights(placements: Placements, prefs: PlanPrefs): Insi
     const heavy = load.workload > prefs.heavyWorkloadHours || load.credits > prefs.preferredMaxCredits;
     if (!heavy) continue;
     const pct = Math.round(((load.workload - avgPast) / avgPast) * 100);
-    // Suggest moving the lightest-impact elective to a later term where it's offered.
     const movable = load.courses
       .filter((c) => !c.mandatory)
       .map((c) => {
@@ -239,13 +283,9 @@ export function generateInsights(placements: Placements, prefs: PlanPrefs): Insi
       severity: 'warning',
       title: `${load.semester.label} looks heavy`,
       body: `Estimated ~${load.workload} h/week across ${load.credits} credits — ${pct > 0 ? `${pct}% above` : 'close to'} your average completed semester (~${Math.round(avgPast)} h).${
-        movable
-          ? ` Moving ${movable.c.name} to ${movable.later.label} would bring it to ~${load.workload - movable.c.workload} h/week.`
-          : ''
+        movable ? ` Moving ${movable.c.name} to ${movable.later.label} would bring it to ~${load.workload - movable.c.workload} h/week.` : ''
       }`,
-      impact: movable
-        ? `Trade-off: graduation would move to ${monthYear(movable.later.end)}`
-        : 'Consider lighter electives or an earlier start on project work',
+      impact: movable ? `Trade-off: graduation would move to ${monthYear(movable.later.end)}` : 'Consider lighter electives',
       confidence: 'Medium',
       courseIds: load.courses.map((c) => c.id),
       action: movable
@@ -254,7 +294,7 @@ export function generateInsights(placements: Placements, prefs: PlanPrefs): Insi
     });
   }
 
-  // AI: recover a delayed graduation by pulling courses back into the target semester or earlier.
+  // AI: recover a delayed graduation by pulling a course back into the target term or earlier.
   if (projection.status === 'delayed') {
     const targetIdx = semesterIndex[program.targetGraduation];
     const lateCourses = courses.filter((c) => placements[c.id] && semesterIndex[placements[c.id]] > targetIdx);
@@ -265,7 +305,7 @@ export function generateInsights(placements: Placements, prefs: PlanPrefs): Insi
         if (unmetPrerequisites(c.id, s.id, next).length) return false;
         const ids = coursesIn(s.id, next).map((x) => x.id);
         const credits = ids.reduce((a, id) => a + courseById[id].credits, 0);
-        return credits <= program.maxCreditsPerSemester && findConflicts(ids).length === 0;
+        return credits <= creditLimit(s.id) && findConflicts(ids).length === 0;
       });
       if (!into) continue;
       out.push({
@@ -284,30 +324,6 @@ export function generateInsights(placements: Placements, prefs: PlanPrefs): Insi
     }
   }
 
-  // AI: elective recommendations when elective credits are short.
-  const electiveIssue = issues.find((i) => i.kind === 'missing-credits' && i.groupId === 'elective');
-  if (electiveIssue) {
-    const pick = courses
-      .filter((c) => c.category === 'elective' && !placements[c.id])
-      .map((c) => ({ c, sem: firstValidSemester(c.id, placements) }))
-      .filter((x) => x.sem && semesterIndex[x.sem.id] <= semesterIndex[program.targetGraduation])
-      .sort((a, b) => avgPrereqGrade(b.c.id) - avgPrereqGrade(a.c.id))[0];
-    if (pick?.sem) {
-      out.push({
-        id: `ai-elective-${pick.c.id}`,
-        source: 'ai',
-        topic: 'planning',
-        severity: 'info',
-        title: `Consider ${pick.c.name}`,
-        body: `It fits ${pick.sem.label} and builds on courses you've done well in.`,
-        impact: `+${pick.c.credits} elective credits`,
-        confidence: 'Medium',
-        courseIds: [pick.c.id],
-        action: { type: 'move', label: `Add to ${pick.sem.label}`, courseId: pick.c.id, to: pick.sem.id },
-      });
-    }
-  }
-
   if (!issues.length && projection.status === 'on-track') {
     out.unshift({
       id: 'rule-ok',
@@ -322,11 +338,6 @@ export function generateInsights(placements: Placements, prefs: PlanPrefs): Insi
 
   const rank: Record<Severity, number> = { critical: 0, warning: 1, info: 2, success: 3 };
   return out.sort((a, b) => rank[a.severity] - rank[b.severity] || (a.source === 'rule' ? -1 : 1));
-}
-
-function avgPrereqGrade(courseId: string) {
-  const g = courseById[courseId].prerequisites.map((p) => grades[p]).filter((x) => x !== undefined);
-  return g.length ? g.reduce((a, b) => a + b, 0) / g.length : 80;
 }
 
 // ── Next steps (home screen) ────────────────────────────────────────────────
@@ -374,7 +385,7 @@ export function nextSteps(placements: Placements, projection: Projection, issues
   }
 
   const blocking = issues.filter(
-    (i) => i.severity === 'critical' && i.kind !== 'missing-course' && i.kind !== 'missing-credits',
+    (i) => i.severity === 'critical' && i.kind !== 'missing-course' && i.kind !== 'missing-credits' && i.kind !== 'missing-rule',
   );
   if (blocking.length) {
     steps.push({
@@ -389,16 +400,15 @@ export function nextSteps(placements: Placements, projection: Projection, issues
     });
   }
 
-  const missing = issues.filter((i) => i.kind === 'missing-course' || i.kind === 'missing-credits');
+  const missing = issues.filter((i) => i.kind === 'missing-course' || i.kind === 'missing-credits' || i.kind === 'missing-rule');
   for (const m of missing.slice(0, 1)) {
-    const course = m.courseIds[0] ? courseById[m.courseIds[0]] : undefined;
+    const course = m.kind === 'missing-course' && m.courseIds[0] ? courseById[m.courseIds[0]] : undefined;
+    const retake = !!course && courseStatus(course.id, placements) === 'failed';
     steps.push({
       id: `missing-${m.id}`,
       priority: 1,
-      title: `Complete the missing ${groupNoun[m.groupId ?? 'core']} requirement`,
-      detail: course
-        ? `Add ${course.name} (${course.credits} cr) to your plan — offered ${offeredText(course)}.`
-        : m.detail,
+      title: retake && course ? `Retake ${course.name}` : `Complete the missing ${groupNoun[m.groupId ?? 'core']} requirement`,
+      detail: course ? `Add ${course.name} (${course.credits} cr) to your plan — offered ${offeredText(course)}.` : m.detail,
       tag: 'Requirement',
       tone: 'danger',
       source: 'rule',
@@ -454,3 +464,4 @@ export function nextSteps(placements: Placements, projection: Projection, issues
 
 export const groupById = Object.fromEntries(requirementGroups.map((g) => [g.id, g]));
 export const semesterList = semesters;
+export { semesterById };

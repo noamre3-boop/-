@@ -1,4 +1,4 @@
-import { ArrowUpRight, CheckCircle2, EyeOff, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowUpRight, Check, CheckCircle2, EyeOff, ShieldCheck, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '../../lib/format';
 import type { Insight } from '../../lib/insights';
@@ -57,6 +57,16 @@ export function InsightCard({ insight, onAfterAction }: { insight: Insight; onAf
         </div>
         <h3 className="mt-2 text-sm font-medium leading-snug text-fg">{insight.title}</h3>
         <p className="mt-1 text-xs leading-relaxed text-muted">{insight.body}</p>
+        {insight.reasons && insight.reasons.length > 0 && (
+          <ul className="mt-2 space-y-1">
+            {insight.reasons.map((r) => (
+              <li key={r} className="flex items-start gap-1.5 text-xs leading-relaxed text-muted">
+                <Check className="mt-0.5 h-3 w-3 shrink-0 text-subtle" aria-hidden />
+                {r}
+              </li>
+            ))}
+          </ul>
+        )}
         {insight.impact && (
           <p className="mt-2.5 flex items-start gap-1.5 text-xs text-fg/80">
             <ArrowUpRight className="mt-px h-3.5 w-3.5 shrink-0 text-subtle" />

@@ -1,9 +1,13 @@
 import {
+  BadgeCheck,
   BookOpenText,
   CheckCircle2,
   CircleDashed,
   CircleDot,
+  CircleMinus,
+  CircleX,
   Cpu,
+  Layers,
   FlagTriangleRight,
   type LucideIcon,
   Shapes,
@@ -22,15 +26,22 @@ export const categoryIcon: Record<CategoryId, LucideIcon> = {
   elective: Shapes,
   project: FlagTriangleRight,
   general: BookOpenText,
+  preparatory: Layers,
 };
 
-export const categoryLabel = Object.fromEntries(requirementGroups.map((g) => [g.id, g.shortName])) as Record<CategoryId, string>;
+export const categoryLabel = {
+  ...Object.fromEntries(requirementGroups.map((g) => [g.id, g.shortName])),
+  preparatory: 'Not in program',
+} as Record<CategoryId, string>;
 
 export const statusMeta: Record<CourseStatus, { label: string; tone: Tone; icon: LucideIcon }> = {
   completed: { label: 'Completed', tone: 'accent', icon: CheckCircle2 },
   'in-progress': { label: 'In progress', tone: 'violet', icon: Timer },
   planned: { label: 'Planned', tone: 'neutral', icon: CircleDot },
   unscheduled: { label: 'Not scheduled', tone: 'neutral', icon: CircleDashed },
+  failed: { label: 'Failed', tone: 'danger', icon: CircleX },
+  exempt: { label: 'Exempt', tone: 'success', icon: BadgeCheck },
+  'not-counted': { label: 'Not counted', tone: 'neutral', icon: CircleMinus },
 };
 
 export function StatusBadge({ status, mandatory }: { status: CourseStatus; mandatory?: boolean }) {
@@ -59,7 +70,9 @@ export function StatusDot({ status, mandatory }: { status: CourseStatus; mandato
     <span
       className={cn(
         'inline-block h-2 w-2 shrink-0 rounded-full',
-        status === 'completed' && 'bg-accent',
+        (status === 'completed' || status === 'exempt') && 'bg-accent',
+        status === 'failed' && 'bg-danger',
+        status === 'not-counted' && 'border border-subtle bg-transparent',
         status === 'in-progress' && 'bg-violet',
         status === 'planned' && 'border border-muted bg-transparent',
         status === 'unscheduled' && (mandatory ? 'border border-dashed border-danger' : 'border border-dashed border-subtle'),

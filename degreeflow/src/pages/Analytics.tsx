@@ -1,7 +1,8 @@
 import { type ColumnDatum, ChartCard, ColumnChart, Legend, LineChart, type LinePoint } from '../components/charts/Charts';
 import { Card, PageHeader } from '../components/ui/Card';
-import { grades } from '../data/courses';
+import { courseById } from '../data/courses';
 import { program } from '../data/program';
+import { attemptsIn, priorCredits } from '../lib/degree';
 import { useDegree } from '../state/store';
 
 const termShort: Record<string, string> = { Fall: 'Fall', Spring: 'Spr', Summer: 'Sum' };
@@ -21,19 +22,26 @@ export function Analytics() {
   const { loads, summary, prefs } = useDegree();
   const active = loads.filter((l) => l.courses.length > 0);
   const completed = active.filter((l) => l.semester.status === 'completed');
+  const regular = completed.filter((l) => l.semester.term !== 'summer');
 
   // Cumulative credits: actual through the last completed semester, projected after.
-  let running = 0;
+  let running = priorCredits;
   const cumulative: LinePoint[] = active.map((l) => {
     running += l.credits;
     return { label: l.semester.label, short: shortLabel(l.semester.label), value: running, projected: l.semester.status !== 'completed' };
   });
 
-  const semesterAvg = completed.map((l) => {
-    const pts = l.courses.reduce((a, c) => a + c.credits * (grades[c.id] ?? 0), 0);
-    const cr = l.courses.reduce((a, c) => a + c.credits, 0);
-    return { label: l.semester.label, short: shortLabel(l.semester.label), value: Math.round((pts / cr) * 10) / 10 };
-  });
+  // Term average over every numeric grade received that term (failed attempts included), credit-weighted.
+  const semesterAvg = completed
+    .map((l) => {
+      const graded = attemptsIn(l.semester.id).filter(
+        (a) => typeof a.grade === 'number' && courseById[a.courseId].category !== 'preparatory',
+      );
+      const cr = graded.reduce((a, x) => a + x.course.credits, 0);
+      const pts = graded.reduce((a, x) => a + x.course.credits * (x.grade as number), 0);
+      return { label: l.semester.label, short: shortLabel(l.semester.label), value: cr ? Math.round((pts / cr) * 10) / 10 : NaN };
+    })
+    .filter((p) => !Number.isNaN(p.value));
   const best = [...semesterAvg].sort((a, b) => b.value - a.value)[0];
 
   const credits: ColumnDatum[] = active.map((l) => ({
@@ -67,8 +75,8 @@ export function Analytics() {
     { label: 'Courses completed', value: summary.completedCourses, hint: `${summary.inProgressCourses} in progress now` },
     {
       label: 'Average load',
-      value: (completed.reduce((a, l) => a + l.credits, 0) / Math.max(1, completed.length)).toFixed(1),
-      hint: 'credits per completed semester',
+      value: (regular.reduce((a, l) => a + l.credits, 0) / Math.max(1, regular.length)).toFixed(1),
+      hint: 'credits per completed fall/spring semester',
     },
   ];
 
@@ -116,7 +124,7 @@ export function Analytics() {
             points={cumulative}
             max={program.totalCredits}
             unit="credits"
-            reference={{ value: program.totalCredits, label: `${program.totalCredits} required` }}
+            reference={{ value: program.totalCredits, label: `${program.totalCredits} required`, align: 'start' }}
           />
         </ChartCard>
 
