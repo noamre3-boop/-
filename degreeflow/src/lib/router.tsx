@@ -5,26 +5,44 @@ import { type AnchorHTMLAttributes, type MouseEvent, useSyncExternalStore } from
  * and the browser back button behaves as expected.
  */
 
+// The current route lives in memory and is mirrored to the URL hash when the host allows it.
+// That keeps navigation working inside sandboxed embeds where hash writes may be ignored.
+const readHash = () => window.location.hash.replace(/^#/, '');
+let current = readHash().startsWith('/') ? readHash() : '/';
+const listeners = new Set<() => void>();
+const emit = () => listeners.forEach((l) => l());
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('hashchange', () => {
+    const h = readHash();
+    // Ignore hashes that aren't routes (e.g. rewritten or cleared by an embedding host).
+    if (h.startsWith('/') && h !== current) {
+      current = h;
+      emit();
+    }
+  });
+}
+
 const subscribe = (cb: () => void) => {
-  window.addEventListener('hashchange', cb);
-  return () => window.removeEventListener('hashchange', cb);
+  listeners.add(cb);
+  return () => listeners.delete(cb);
 };
-const getHash = () => window.location.hash || '#/';
 
 export function useRoute() {
-  const hash = useSyncExternalStore(subscribe, getHash, () => '#/');
-  const raw = hash.replace(/^#/, '') || '/';
+  const raw = useSyncExternalStore(subscribe, () => current, () => '/');
   const [path, query = ''] = raw.split('?');
   return { path: path || '/', params: new URLSearchParams(query), href: raw };
 }
 
 export function navigate(to: string, opts: { replace?: boolean } = {}) {
-  const target = `#${to}`;
-  if (opts.replace) {
-    window.history.replaceState(null, '', target);
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
-  } else if (window.location.hash !== target) {
-    window.location.hash = to;
+  if (to === current) return;
+  current = to;
+  emit();
+  try {
+    if (opts.replace) window.history.replaceState(null, '', `#${to}`);
+    else window.location.hash = to;
+  } catch {
+    /* the route still changes in memory */
   }
 }
 

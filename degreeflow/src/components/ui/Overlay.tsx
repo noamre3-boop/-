@@ -75,7 +75,7 @@ export function Drawer({
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          'absolute inset-y-0 flex w-full flex-col border-line bg-surface shadow-pop outline-none',
+          'absolute inset-y-0 flex w-full flex-col border-line bg-surface pb-[env(safe-area-inset-bottom,0px)] pt-[env(safe-area-inset-top,0px)] shadow-pop outline-none',
           width,
           side === 'right' ? 'right-0 animate-slide-in-right border-l' : 'left-0 animate-slide-in-left border-r',
         )}

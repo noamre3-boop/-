@@ -21,7 +21,7 @@ export function Topbar() {
   const attention = insights.filter((i) => i.severity === 'critical' || i.severity === 'warning').length;
 
   return (
-    <header className="sticky top-0 z-20 border-b border-line bg-canvas/75 backdrop-blur-xl">
+    <header className="sticky top-[env(safe-area-inset-top,0px)] z-20 border-b border-line bg-canvas/75 backdrop-blur-xl">
       <div className="flex h-14 items-center gap-2 px-4 sm:px-6 lg:px-8">
         <button className={cn(iconBtn, 'lg:hidden')} aria-label="Open navigation" onClick={() => setNavOpen(true)}>
           <MenuIcon className="h-[18px] w-[18px]" />
