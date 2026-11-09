@@ -1,0 +1,1799 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>LIFE</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Karla:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one centered column per screen over a live starfield; editor = avatar rail + tabbed controls; fixed bottom nav. Single deliberate night look. */
+:root{
+  color-scheme: dark;
+  --bg:#060a14;
+  --bg-2:#0a1226;
+  --panel:rgba(16,26,50,.66);
+  --panel-solid:#0e172e;
+  --line:rgba(186,201,230,.13);
+  --line-strong:rgba(186,201,230,.30);
+  --fg:#e7ebf3;
+  --muted:#8b96ae;
+  --silver:#c9d1df;
+  --moon:#f2f4f9;
+  --accent:#a8bbe2;
+  --accent-soft:rgba(168,187,226,.14);
+  --danger:#e6a3a3;
+  --on-silver:#0a1124;
+
+  --f-display:"Marcellus","Cormorant Garamond",Georgia,serif;
+  --f-body:"Karla",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  --r:14px;
+  --ease:cubic-bezier(.2,.7,.1,1);
+  --gutter-l:max(16px, env(safe-area-inset-left, 0px));
+  --gutter-r:max(16px, env(safe-area-inset-right, 0px));
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.55;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+#sky{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.atmos{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(120% 70% at 50% -10%, rgba(40,62,120,.38), transparent 60%),
+    radial-gradient(80% 60% at 100% 110%, rgba(22,34,72,.55), transparent 70%)}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+h1,h2,h3{font-family:var(--f-display);font-weight:400;margin:0;text-wrap:balance}
+p{margin:0}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+
+.app{position:relative;z-index:1;min-height:100%;display:flex;flex-direction:column}
+
+/* ---------- top bar ---------- */
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;
+  background:linear-gradient(var(--bg) 55%, rgba(6,10,20,0));
+  padding-left:var(--gutter-l);padding-right:var(--gutter-r);padding-block:12px 18px}
+.topbar-in{max-width:1120px;margin:0 auto;display:flex;align-items:center;gap:16px}
+.brand{display:flex;align-items:center;gap:8px;font-family:var(--f-display);letter-spacing:.32em;font-size:15px;color:var(--silver);padding:4px 2px}
+.brand svg{width:20px;height:20px}
+.steps{list-style:none;margin:0 auto;padding:0;display:flex;gap:4px;align-items:center}
+.steps li{display:flex;align-items:center;gap:4px}
+.steps li+li::before{content:"";width:18px;height:1px;background:var(--line-strong)}
+.steps button{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:6px 8px;border-radius:999px;transition:color .2s}
+.steps button[data-done="true"]{color:var(--silver)}
+.steps button[aria-current="step"]{color:var(--moon);background:var(--accent-soft)}
+.saved{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;min-width:64px;justify-content:flex-end}
+.saved::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);opacity:.5;transition:opacity .3s,box-shadow .3s}
+.saved.pulse::before{opacity:1;box-shadow:0 0 10px var(--accent)}
+
+/* ---------- stage & transitions ---------- */
+.stage{flex:1;width:100%;max-width:1120px;margin:0 auto;padding-left:var(--gutter-l);padding-right:var(--gutter-r);padding-block:8px 48px}
+.app.has-nav .stage{padding-bottom:128px}
+.screen{outline:none}
+.screen.enter-f{animation:inF .55s var(--ease) both}
+.screen.enter-b{animation:inB .55s var(--ease) both}
+.screen.leave{animation:out .2s ease both}
+@keyframes inF{from{opacity:0;transform:translateX(28px);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}
+@keyframes inB{from{opacity:0;transform:translateX(-28px);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}
+@keyframes out{to{opacity:0;transform:translateY(-6px)}}
+
+.screen-head{display:grid;gap:10px;margin:8px 0 28px;max-width:640px}
+.screen-head h2{font-size:clamp(28px,4.4vw,42px);letter-spacing:.01em;color:var(--moon)}
+.lede{color:var(--muted);font-size:17px;max-width:60ch}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:999px;padding:12px 24px;font-weight:500;letter-spacing:.04em;transition:transform .2s var(--ease),background .2s,border-color .2s,box-shadow .3s,color .2s}
+.btn.primary{background:linear-gradient(180deg,#f4f6fb,#c3cbdb);color:var(--on-silver);box-shadow:0 0 0 1px rgba(255,255,255,.2) inset,0 8px 30px rgba(168,187,226,.18)}
+.btn.primary:hover{box-shadow:0 0 0 1px rgba(255,255,255,.3) inset,0 10px 40px rgba(168,187,226,.32);transform:translateY(-1px)}
+.btn.ghost{border:1px solid var(--line-strong);color:var(--silver)}
+.btn.ghost:hover{border-color:var(--accent);color:var(--moon)}
+.btn.small{padding:8px 16px;font-size:14px}
+.btn.danger{border:1px solid rgba(230,163,163,.45);color:var(--danger)}
+.btn:active{transform:translateY(1px)}
+
+/* ---------- intro ---------- */
+.intro{display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:clamp(8px,4vh,40px)}
+.moon-wrap{position:relative;width:min(58vw,250px);aspect-ratio:1;max-width:100%}
+.moon-wrap::before{content:"";position:absolute;inset:-18%;border-radius:50%;
+  background:radial-gradient(circle at 46% 50%, rgba(170,192,240,.28), rgba(60,90,170,.10) 45%, transparent 68%);animation:breathe 7s ease-in-out infinite}
+.moon-wrap::after{content:"";position:absolute;inset:-6%;border-radius:50%;border:1px solid rgba(200,212,240,.10)}
+.moon-wrap svg{position:relative;width:100%;height:100%;animation:float 9s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-8px) rotate(-2deg)}}
+@keyframes breathe{0%,100%{opacity:.75;transform:scale(1)}50%{opacity:1;transform:scale(1.05)}}
+.title{font-size:clamp(64px,14vw,128px);letter-spacing:.34em;margin:18px 0 0 .34em;color:var(--moon);line-height:1;
+  background:linear-gradient(180deg,#ffffff 20%,#aeb9cf 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.subtitle{font-family:var(--f-display);font-size:clamp(19px,2.6vw,26px);color:var(--silver);margin-top:14px}
+.kicker{margin-top:56px;font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:14px}
+.kicker::before,.kicker::after{content:"";width:40px;height:1px;background:var(--line-strong)}
+.rules{list-style:none;padding:0;margin:22px 0 0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;width:100%;text-align:left}
+.rule{position:relative;display:grid;gap:10px;align-content:start;padding:22px 20px 22px;border-radius:var(--r);background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(6px);
+  transition:border-color .3s,transform .3s var(--ease)}
+.rule:hover{border-color:var(--line-strong);transform:translateY(-2px)}
+.rule svg.phase{width:26px;height:26px}
+.rule h3{font-size:19px;line-height:1.3;color:var(--moon)}
+.rule p{color:var(--muted);font-size:15px}
+.res{display:flex;gap:6px;flex-wrap:wrap}
+.res span{font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:3px 10px;border-radius:999px;border:1px solid var(--line-strong);color:var(--silver)}
+.btn-start{margin:40px 0 12px;padding:16px 46px;font-size:15px;letter-spacing:.32em;text-transform:uppercase}
+.intro-note{color:var(--muted);font-size:13px}
+
+/* ---------- character editor ---------- */
+.editor{display:grid;grid-template-columns:minmax(250px,340px) minmax(0,1fr);gap:28px;align-items:start}
+.avatar-panel{position:sticky;top:calc(env(safe-area-inset-top,0px) + 76px);display:grid;gap:16px;padding:20px;border-radius:var(--r);background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(6px)}
+.avatar-stage{width:100%;max-width:260px;margin:0 auto;aspect-ratio:200/330}
+.avatar-stage svg{width:100%;height:100%;display:block}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0}
+.stats div{display:grid;gap:2px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--line);min-width:0}
+.stats dt{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.stats dd{margin:0;font-size:14px;color:var(--moon);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.avatar-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+
+.tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--line);margin-bottom:22px}
+.tabs::-webkit-scrollbar{display:none}
+.tab{position:relative;flex:none;padding:12px 14px;color:var(--muted);font-size:15px;letter-spacing:.02em;transition:color .2s}
+.tab::after{content:"";position:absolute;left:12px;right:12px;bottom:-1px;height:2px;border-radius:2px;background:var(--moon);transform:scaleX(0);transition:transform .3s var(--ease)}
+.tab[aria-selected="true"]{color:var(--moon)}
+.tab[aria-selected="true"]::after{transform:scaleX(1)}
+.tabpanel{display:grid;gap:26px;animation:fade .35s ease both}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+.field{display:grid;gap:12px;min-width:0}
+.label,.field>label{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.label .val{font-family:var(--f-mono);letter-spacing:0;text-transform:none;font-size:14px;color:var(--moon)}
+.hint{color:var(--muted);font-size:15px;max-width:60ch}
+
+.swatches{display:flex;flex-wrap:wrap;gap:10px}
+.sw{width:38px;height:38px;border-radius:50%;background:var(--c);border:2px solid rgba(255,255,255,.08);box-shadow:0 0 0 0 transparent;transition:box-shadow .2s,transform .2s var(--ease)}
+.sw:hover{transform:scale(1.07)}
+.sw[aria-checked="true"]{box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--moon)}
+
+.seg{display:flex;flex-wrap:wrap;gap:8px}
+.opt{padding:9px 16px;border-radius:999px;border:1px solid var(--line-strong);color:var(--silver);font-size:15px;transition:all .2s}
+.opt:hover{border-color:var(--accent)}
+.opt[aria-checked="true"],.opt[aria-pressed="true"]{background:var(--moon);color:var(--on-silver);border-color:var(--moon)}
+.opt[aria-disabled="true"]{opacity:.38;cursor:not-allowed}
+
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:28px;background:transparent;cursor:pointer;margin:0}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:4px;background:linear-gradient(90deg,var(--accent) var(--p,50%),var(--line-strong) var(--p,50%))}
+input[type=range].bipolar::-webkit-slider-runnable-track{background:linear-gradient(90deg,var(--line-strong) calc(50% - 1px),var(--silver) calc(50% - 1px) calc(50% + 1px),var(--line-strong) calc(50% + 1px))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--moon);margin-top:-8px;box-shadow:0 0 0 5px rgba(168,187,226,.16),0 0 16px rgba(210,222,250,.55)}
+input[type=range]::-moz-range-track{height:4px;border-radius:4px;background:var(--line-strong)}
+input[type=range]::-moz-range-progress{height:4px;border-radius:4px;background:var(--accent)}
+input[type=range].bipolar::-moz-range-progress{background:transparent}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border:0;border-radius:50%;background:var(--moon);box-shadow:0 0 0 5px rgba(168,187,226,.16),0 0 16px rgba(210,222,250,.55)}
+.poles{display:flex;justify-content:space-between;gap:12px;font-size:14px;color:var(--muted)}
+.poles b{font-weight:500;color:var(--moon)}
+.pole-row{display:grid;gap:4px}
+.lean{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);text-align:center}
+
+.genes{display:grid;gap:14px}
+.gene{display:grid;grid-template-columns:110px minmax(0,1fr) 28px;align-items:center;gap:14px}
+.gene span{font-size:15px;color:var(--silver)}
+.pips{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:4px}
+.pips i{height:10px;border-radius:3px;background:rgba(255,255,255,.06);transition:background .4s, box-shadow .4s}
+.pips i.on{background:linear-gradient(180deg,#eef2fa,#9fb0d4);box-shadow:0 0 8px rgba(190,206,240,.35)}
+.gene .mono{text-align:right;color:var(--moon)}
+.genes-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding-top:6px;border-top:1px solid var(--line)}
+.genes-foot .mono{color:var(--muted);font-size:13px}
+
+/* ---------- identity ---------- */
+.identity{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:32px;align-items:start}
+.id-form{display:grid;gap:30px;min-width:0}
+.text-in{width:100%;padding:14px 16px;border-radius:12px;background:rgba(255,255,255,.035);border:1px solid var(--line-strong);font-size:17px;transition:border-color .2s,box-shadow .2s}
+.text-in::placeholder{color:#626d86}
+.text-in:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px rgba(168,187,226,.12)}
+#player-name{font-family:var(--f-display);font-size:24px;letter-spacing:.02em}
+.goal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:10px}
+.goal{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.02);color:var(--silver);text-align:left;min-width:0;transition:all .2s}
+.goal svg{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:.75}
+.goal span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.goal:hover{border-color:var(--line-strong)}
+.goal[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--moon)}
+.goal[aria-pressed="true"] svg{opacity:1;filter:drop-shadow(0 0 5px rgba(200,215,250,.6))}
+.goal-custom{position:relative;display:flex;min-width:0}
+.goal-custom .goal{flex:1;padding-right:38px}
+.goal-x{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:28px;height:28px;border-radius:50%;color:var(--muted);display:grid;place-items:center;font-size:18px;line-height:1}
+.goal-x:hover{color:var(--danger);background:rgba(230,163,163,.1)}
+.add-row{display:flex;gap:10px}
+.add-row .text-in{flex:1;min-width:0;font-size:16px;padding:12px 14px}
+.error{color:var(--danger);font-size:15px}
+.id-visual{position:sticky;top:calc(env(safe-area-inset-top,0px) + 76px);padding:18px;border-radius:var(--r);background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(6px);display:grid;gap:10px}
+.id-visual .cap{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.id-visual .cap strong{font-family:var(--f-display);font-weight:400;font-size:22px;color:var(--moon);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.id-visual .cap span{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);flex:none}
+.constellation svg{width:100%;height:auto;display:block}
+.constellation text{font-family:var(--f-body);font-size:13px;fill:var(--silver)}
+.constellation .empty{font-size:13px;fill:var(--muted)}
+.star-in{animation:pop .5s var(--ease) both}
+@keyframes pop{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:none}}
+.star-in{transform-box:fill-box;transform-origin:center}
+
+/* ---------- summary ---------- */
+.summary{display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr);gap:28px;align-items:start;padding:24px;border-radius:var(--r);background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(6px)}
+.summary .avatar-stage{max-width:220px}
+.sum-body{display:grid;gap:24px;min-width:0}
+.sum-name{font-family:var(--f-display);font-size:clamp(30px,4vw,40px);color:var(--moon);overflow-wrap:anywhere}
+.sum-sec{display:grid;gap:10px}
+.sum-sec h3{font-family:var(--f-body);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.tags{display:flex;flex-wrap:wrap;gap:8px}
+.tags span{padding:5px 12px;border-radius:999px;border:1px solid var(--line-strong);color:var(--silver);font-size:14px}
+.sum-genes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.sum-genes div{display:grid;gap:6px;min-width:0}
+.sum-genes span{font-size:13px;color:var(--muted);display:flex;justify-content:space-between}
+.sum-genes span b{font-family:var(--f-mono);font-weight:400;color:var(--moon)}
+.sum-links{display:flex;gap:10px;flex-wrap:wrap}
+
+/* ---------- bottom nav ---------- */
+.navbar{position:fixed;left:0;right:0;bottom:0;z-index:7;
+  padding-left:var(--gutter-l);padding-right:var(--gutter-r);padding-top:18px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));
+  background:linear-gradient(rgba(6,10,20,0),var(--bg) 42%)}
+.navbar-in{max-width:1120px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.navbar .btn{min-width:120px}
+.nav-hint{font-size:13px;color:var(--muted);text-align:center;flex:1;min-width:0}
+
+/* ---------- responsive ---------- */
+@media (max-width:900px){
+  .rules{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .identity{grid-template-columns:minmax(0,1fr)}
+  .id-visual{position:static;order:-1}
+}
+@media (max-width:820px){
+  .editor{grid-template-columns:minmax(0,1fr);gap:20px}
+  .avatar-panel{position:static;grid-template-columns:120px minmax(0,1fr);align-items:center;padding:14px;gap:14px}
+  .avatar-stage{max-width:120px}
+  .stats{grid-template-columns:minmax(0,1fr)}
+  .stats div{grid-template-columns:auto minmax(0,1fr);align-items:baseline;gap:8px;padding:6px 10px}
+  .stats dd{text-align:right}
+  .avatar-actions{grid-column:1 / -1}
+  .summary{grid-template-columns:minmax(0,1fr)}
+  .summary .avatar-stage{max-width:160px}
+}
+@media (max-width:560px){
+  .rules{grid-template-columns:minmax(0,1fr)}
+  .rule{grid-template-columns:28px minmax(0,1fr);column-gap:14px;padding:18px 16px}
+  .rule svg.phase{grid-row:span 3}
+  .steps li+li::before{width:8px}
+  .steps button{padding:6px 6px;font-size:11px;letter-spacing:.04em}
+  .saved{min-width:0;font-size:0}
+  .brand span{display:none}
+  .gene{grid-template-columns:86px minmax(0,1fr) 22px;gap:10px}
+  .sum-genes{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .navbar .btn{min-width:0;padding:12px 20px}
+  .nav-hint{display:none}
+  .goal-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+
+/* ---------- realism pass: lighting, glass, film grain ---------- */
+.atmos{background:radial-gradient(140% 100% at 50% 35%, transparent 52%, rgba(0,0,0,.5) 100%)}
+.atmos::after{content:"";position:absolute;inset:0;opacity:.04;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.rule,.avatar-panel,.summary,.id-visual{background:linear-gradient(180deg,rgba(24,36,66,.6),rgba(9,15,32,.74));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 60px -20px rgba(0,0,0,.75);
+  -webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2)}
+.avatar-stage{border-radius:12px;overflow:hidden;background:#070c19;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),0 14px 34px -14px rgba(0,0,0,.85)}
+.blink{transform-box:fill-box;transform-origin:50% 0;transform:scaleY(0);animation:blink 6.5s infinite}
+@keyframes blink{0%,94%,100%{transform:scaleY(0)}96%{transform:scaleY(1)}}
+.view-toggle{gap:4px}
+.view-toggle .opt{padding:6px 14px;font-size:13px}
+.sw{background:var(--c);background:radial-gradient(circle at 34% 30%,color-mix(in srgb,var(--c),#fff 32%),var(--c) 52%,color-mix(in srgb,var(--c),#000 38%));
+  box-shadow:inset 0 -2px 4px rgba(0,0,0,.25),0 2px 6px rgba(0,0,0,.35)}
+.sw[aria-checked="true"]{box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--moon),0 0 18px rgba(210,222,250,.35)}
+.sum-head{display:flex;align-items:center;gap:16px;min-width:0}
+.sum-head>div{min-width:0}
+.sum-portrait{width:84px;height:84px;flex:none;border-radius:50%;overflow:hidden;background:#070c19;border:1px solid var(--line-strong);
+  box-shadow:0 0 0 4px rgba(168,187,226,.08),0 10px 30px rgba(0,0,0,.5)}
+.sum-portrait svg{width:100%;height:100%;display:block}
+.constellation .tw{animation:tw 3.6s ease-in-out infinite}
+@keyframes tw{0%,100%{opacity:.55}50%{opacity:1}}
+.moon-wrap::before{background:radial-gradient(circle at 56% 44%,rgba(190,205,240,.2),rgba(60,90,170,.07) 45%,transparent 66%)}
+.moon-wrap::after{display:none}
+.rule svg.phase{width:30px;height:30px}
+</style>
+
+<canvas id="sky" aria-hidden="true"></canvas>
+<div class="atmos" aria-hidden="true"></div>
+
+<div class="app" id="app">
+  <header class="topbar" id="topbar" hidden>
+    <div class="topbar-in">
+      <button class="brand" data-go="intro" aria-label="Back to the rules">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><defs><mask id="bm"><rect width="24" height="24" fill="#fff"/><circle cx="15.5" cy="9.5" r="7.5" fill="#000"/></mask></defs><circle cx="12" cy="12" r="9" fill="#e8ecf5" mask="url(#bm)"/></svg>
+        <span>LIFE</span>
+      </button>
+      <ol class="steps" id="steps">
+        <li><button data-go="intro" data-step="intro">Rules</button></li>
+        <li><button data-go="character" data-step="character">Character</button></li>
+        <li><button data-go="identity" data-step="identity">Identity</button></li>
+      </ol>
+      <span class="saved" id="saved">Saved</span>
+    </div>
+  </header>
+
+  <main class="stage" id="stage">
+    <section class="screen" data-screen="intro" tabindex="-1" aria-label="Opening" hidden></section>
+    <section class="screen" data-screen="character" tabindex="-1" aria-label="Character creation" hidden></section>
+    <section class="screen" data-screen="identity" tabindex="-1" aria-label="Player identity" hidden></section>
+    <section class="screen" data-screen="summary" tabindex="-1" aria-label="Your player" hidden></section>
+  </main>
+
+  <nav class="navbar" id="navbar" aria-label="Screen navigation" hidden>
+    <div class="navbar-in">
+      <button class="btn ghost" id="btnBack">Back</button>
+      <p class="nav-hint" id="navHint"></p>
+      <button class="btn primary" id="btnNext">Continue</button>
+    </div>
+  </nav>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* =========================================================
+   1. CONFIG — all game data lives here (extend freely)
+   ========================================================= */
+const CONFIG = {
+  skin: ['#f3d9c6', '#e7bd99', '#cc9873', '#a8724f', '#7c5137', '#4e3324'],
+  hairColor: [
+    { id: 'black', label: 'Black', c: '#1c1b21' },
+    { id: 'brown', label: 'Brown', c: '#4b3327' },
+    { id: 'chestnut', label: 'Chestnut', c: '#7d4b2e' },
+    { id: 'blonde', label: 'Blonde', c: '#d8b878' },
+    { id: 'red', label: 'Red', c: '#a6462d' },
+    { id: 'silver', label: 'Silver', c: '#ccd2dc' },
+    { id: 'midnight', label: 'Midnight', c: '#2e3e72' }
+  ],
+  eyeColor: [
+    { label: 'Dark brown', c: '#3a2a20' },
+    { label: 'Hazel', c: '#7a5631' },
+    { label: 'Green', c: '#4e7d5c' },
+    { label: 'Blue', c: '#4f73a3' },
+    { label: 'Grey', c: '#8d95a3' }
+  ],
+  faceShapes: [{ id: 'oval', label: 'Oval' }, { id: 'round', label: 'Round' }, { id: 'angular', label: 'Angular' }],
+  hairStyles: [
+    { id: 'short', label: 'Short' }, { id: 'long', label: 'Long' }, { id: 'bun', label: 'Bun' },
+    { id: 'curly', label: 'Curly' }, { id: 'shaved', label: 'Shaved' }
+  ],
+  hands: [{ id: 'right', label: 'Right-handed' }, { id: 'left', label: 'Left-handed' }],
+  height: { min: 150, max: 200 },
+  personality: [
+    { id: 'social', left: 'Introvert', right: 'Extrovert' },
+    { id: 'risk', left: 'Cautious', right: 'Bold' },
+    { id: 'mind', left: 'Logical', right: 'Emotional' },
+    { id: 'pace', left: 'Planner', right: 'Spontaneous' }
+  ],
+  traits: ['Curious', 'Patient', 'Ambitious', 'Kind', 'Stubborn', 'Witty', 'Loyal', 'Calm', 'Restless', 'Honest', 'Imaginative', 'Disciplined'],
+  maxTraits: 3,
+  genetics: [
+    { id: 'health', label: 'Health' }, { id: 'intellect', label: 'Intellect' }, { id: 'strength', label: 'Strength' },
+    { id: 'charm', label: 'Charm' }, { id: 'creativity', label: 'Creativity' }, { id: 'resilience', label: 'Resilience' }
+  ],
+  goals: [
+    { id: 'wealth', label: 'Wealth' }, { id: 'freedom', label: 'Freedom' }, { id: 'knowledge', label: 'Knowledge' },
+    { id: 'power', label: 'Power' }, { id: 'love', label: 'Love' }, { id: 'achievement', label: 'Achievement' },
+    { id: 'exploration', label: 'Exploration' }, { id: 'creation', label: 'Creation' }, { id: 'happiness', label: 'Happiness' }
+  ],
+  maxCustomGoals: 6,
+  rules: [
+    { t: 'No predefined objective.', d: 'Nothing tells you what winning means. You decide what matters.' },
+    { t: 'Every player has different starting settings.', d: 'Your body, temperament and genetics are yours alone.' },
+    { t: 'Resources are limited: time, energy and money.', d: 'Spend them with care.', res: ['Time', 'Energy', 'Money'] },
+    { t: 'Decisions influence future possibilities.', d: 'Each choice opens some doors and quietly closes others.' },
+    { t: 'There are countless possible paths.', d: 'No two lives unfold the same way, even from the same start.' },
+    { t: 'Players can change their goals and direction.', d: 'What you want can change. So can the road you take.' }
+  ]
+};
+
+const ICONS = {
+  wealth: '<circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="3.2"/>',
+  freedom: '<path d="M2 9.5c3-3.2 6-3.2 8 1 2-4.2 5-4.2 8-1"/><path d="M10 10.5v6"/>',
+  knowledge: '<path d="M3 4h5a2 2 0 0 1 2 2v10a2 2 0 0 0-2-2H3zM17 4h-5a2 2 0 0 0-2 2v10a2 2 0 0 1 2-2h5z"/>',
+  power: '<path d="M11 2 4 11h5l-1 7 7-9h-5z"/>',
+  love: '<path d="M10 16.5s-6-3.6-6-8.2a3.2 3.2 0 0 1 6-1.6 3.2 3.2 0 0 1 6 1.6c0 4.6-6 8.2-6 8.2z"/>',
+  achievement: '<path d="m10 2.5 2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z"/>',
+  exploration: '<circle cx="10" cy="10" r="7"/><path d="m12.8 7.2-1.6 4-4 1.6 1.6-4z"/>',
+  creation: '<path d="M10 2v4M10 14v4M2 10h4M14 10h4M5 5l2.5 2.5M12.5 12.5 15 15M15 5l-2.5 2.5M7.5 12.5 5 15"/>',
+  happiness: '<circle cx="10" cy="10" r="3.5"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.4 1.4M14.3 14.3l1.4 1.4M15.7 4.3l-1.4 1.4M5.7 14.3l-1.4 1.4"/>',
+  custom: '<path d="m10 3 5 7-5 7-5-7z"/>'
+};
+
+/* =========================================================
+   2. UTILITIES
+   ========================================================= */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const rnd = n => {
+  try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; }
+  catch (e) { return Math.floor(Math.random() * n); }
+};
+const pick = arr => arr[rnd(arr.length)];
+const getPath = (o, p) => p.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
+const setPath = (o, p, v) => {
+  const ks = p.split('.'); const last = ks.pop();
+  const t = ks.reduce((a, k) => (a[k] == null ? (a[k] = {}) : a[k]), o);
+  t[last] = v;
+};
+const hash = s => { let h = 2166136261; for (const ch of String(s)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
+const reducedMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
+const lean = (v, l, r) => (v < 35 ? l : v > 65 ? r : 'Balanced');
+const buildLabel = b => (b < 20 ? 'Slender' : b < 40 ? 'Lean' : b < 60 ? 'Average' : b < 80 ? 'Athletic' : 'Broad');
+
+function rollGenetics() {
+  const values = {};
+  CONFIG.genetics.forEach(g => { values[g.id] = 2 + rnd(3) + rnd(3) + rnd(4); }); // 2..9, centered
+  const code = 'LF-' + CONFIG.genetics.map(g => values[g.id].toString(16).toUpperCase()).join('') +
+    '-' + rnd(0xffff).toString(16).toUpperCase().padStart(4, '0');
+  return { values, code };
+}
+
+/* =========================================================
+   3. STORE — single source of truth, persisted locally
+   ========================================================= */
+const Store = (() => {
+  const KEY = 'life.player.v1';
+  const listeners = new Set();
+  const defaults = () => ({
+    version: 1,
+    screen: 'intro',
+    character: {
+      skin: 2, face: 'oval', hairStyle: 'short', hairColor: 'brown', eyeColor: 1,
+      height: 172, build: 45, hand: 'right',
+      personality: { social: 50, risk: 50, mind: 50, pace: 50 },
+      traits: [],
+      genetics: rollGenetics()
+    },
+    identity: { name: '', goals: [], customGoals: [] },
+    updatedAt: 0
+  });
+  function merge(def, saved) {
+    if (Array.isArray(def)) return Array.isArray(saved) ? saved : def;
+    if (def && typeof def === 'object') {
+      const out = { ...def };
+      if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+        for (const k of Object.keys(saved)) out[k] = k in def ? merge(def[k], saved[k]) : saved[k];
+      }
+      return out;
+    }
+    return (saved === undefined || saved === null || typeof saved !== typeof def) ? def : saved;
+  }
+  let state;
+  try {
+    const raw = localStorage.getItem(KEY);
+    state = raw ? merge(defaults(), JSON.parse(raw)) : defaults();
+  } catch (e) { state = defaults(); }
+
+  let timer;
+  function persist() {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      try { localStorage.setItem(KEY, JSON.stringify(state)); emitSaved(); } catch (e) { /* storage unavailable */ }
+    }, 160);
+  }
+  function emitSaved() { document.dispatchEvent(new CustomEvent('life:saved')); }
+  return {
+    get: () => state,
+    update(fn, opts = {}) {
+      fn(state);
+      state.updatedAt = Date.now();
+      persist();
+      if (!opts.silent) listeners.forEach(l => l(state));
+    },
+    subscribe(l) { listeners.add(l); return () => listeners.delete(l); },
+    reset() {
+      state = defaults();
+      try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
+      listeners.forEach(l => l(state));
+    }
+  };
+})();
+
+/* =========================================================
+   4. RENDERERS — pure functions returning markup
+   ========================================================= */
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const fx = n => String(Math.round(n * 100) / 100);
+const P = (x, y) => fx(x) + ' ' + fx(y);
+const hex2rgb = h => { h = String(h).replace('#', ''); if (h.length === 3) h = h.replace(/./g, '$&$&'); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); };
+const rgb2hex = a => '#' + a.map(v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join('');
+const mix = (a, b, t) => { const A = hex2rgb(a), B = hex2rgb(b); return rgb2hex(A.map((v, i) => v + (B[i] - v) * t)); };
+const seeded = seed => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+const lerp = (a, b, t) => a + (b - a) * t;
+const lerp2 = (A, B, t) => [lerp(A[0], B[0], t), lerp(A[1], B[1], t)];
+const mirrorPts = pts => [...pts, ...pts.slice(1, -1).reverse().map(([x, y]) => [200 - x, y])];
+const flipX = (pts, side) => pts.map(([x, y, ...r]) => [100 + side * (x - 100), y, ...r]);
+const bez = (q, t) => { const u = 1 - t; return [0, 1].map(i => u * u * u * q[0][i] + 3 * u * u * t * q[1][i] + 3 * u * t * t * q[2][i] + t * t * t * q[3][i]); };
+
+/* Catmull-Rom spline through points → smooth cubic path */
+function smooth(pts, closed = true) {
+  const n = pts.length; if (n < 2) return '';
+  const g = i => closed ? pts[(i + n) % n] : pts[clamp(i, 0, n - 1)];
+  let d = 'M' + P(pts[0][0], pts[0][1]);
+  const segs = closed ? n : n - 1;
+  for (let i = 0; i < segs; i++) {
+    const p0 = g(i - 1), p1 = g(i), p2 = g(i + 1), p3 = g(i + 2);
+    d += 'C' + P(p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6) + ' ' +
+      P(p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6) + ' ' + P(p2[0], p2[1]);
+  }
+  return closed ? d + 'Z' : d;
+}
+
+/* Tapered limb along a centreline [[x, y, halfWidth], …] with rounded ends */
+function tube(pts, steps = 8) {
+  const cr = (a, b, c, d, t) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (-a + 3 * b - 3 * c + d) * t * t * t);
+  const sm = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    for (let k = 0; k < steps; k++) { const t = k / steps; sm.push([0, 1, 2].map(j => cr(p0[j], p1[j], p2[j], p3[j], t))); }
+  }
+  sm.push(pts[pts.length - 1]);
+  const L = [], R = [];
+  sm.forEach((q, i) => {
+    const a = sm[Math.max(0, i - 1)], z = sm[Math.min(sm.length - 1, i + 1)];
+    const dx = z[0] - a[0], dy = z[1] - a[1], l = Math.hypot(dx, dy) || 1;
+    const nx = -dy / l, ny = dx / l;
+    L.push([q[0] + nx * q[2], q[1] + ny * q[2]]); R.push([q[0] - nx * q[2], q[1] - ny * q[2]]);
+  });
+  const w0 = sm[0][2], w1 = sm[sm.length - 1][2];
+  R.reverse();
+  return 'M' + L.map(p => P(p[0], p[1])).join('L') +
+    `A${fx(w1)} ${fx(w1)} 0 0 0 ` + P(R[0][0], R[0][1]) + 'L' + R.map(p => P(p[0], p[1])).join('L') +
+    `A${fx(w0)} ${fx(w0)} 0 0 0 ` + P(L[0][0], L[0][1]) + 'Z';
+}
+
+function samplePoly(poly, t) {
+  const seg = []; let tot = 0;
+  for (let i = 1; i < poly.length; i++) { const l = Math.hypot(poly[i][0] - poly[i - 1][0], poly[i][1] - poly[i - 1][1]); seg.push(l); tot += l; }
+  let d = clamp(t, 0, 1) * tot;
+  for (let i = 0; i < seg.length; i++) {
+    if (d <= seg[i] || i === seg.length - 1) return lerp2(poly[i], poly[i + 1], seg[i] ? clamp(d / seg[i], 0, 1) : 0);
+    d -= seg[i];
+  }
+  return poly[0];
+}
+
+/* ---------- Moon: albedo maria, craters, ray system, soft terminator, earthshine ---------- */
+function moonSVG(o = {}) {
+  const { id = 'mh', lit = 0.3, tilt = -32, detail = true, glow = true, view = '0 0 200 200',
+    attrs = 'role="img" aria-label="Crescent moon with earthshine"' } = o;
+  const R = 64, cx = 100, cy = 100, rng = seeded(hash(id) ^ 0x51ab);
+  const F = clamp(lit, 0.001, 1);
+  const rx = Math.abs(1 - 2 * F) * R;
+  const litD = F >= 0.999
+    ? `M${cx} ${cy - R}A${R} ${R} 0 1 1 ${cx} ${cy + R}A${R} ${R} 0 1 1 ${cx} ${cy - R}Z`
+    : `M${cx} ${cy - R}A${R} ${R} 0 0 1 ${cx} ${cy + R}A${fx(rx)} ${R} 0 0 ${F < 0.5 ? 0 : 1} ${cx} ${cy - R}Z`;
+  // the near side's dark plains, loosely placed (x right, y down, in moon radii)
+  const MARIA = [[-0.34, -0.38, 0.25], [0.14, -0.36, 0.17], [0.31, -0.06, 0.2], [0.67, -0.27, 0.12], [0.53, 0.22, 0.15],
+    [-0.56, -0.04, 0.31], [-0.63, 0.31, 0.16], [-0.16, 0.34, 0.17], [-0.43, 0.53, 0.1], [0.02, -0.09, 0.1], [0.33, 0.43, 0.1]];
+  const maria = MARIA.map(([mx, my, mr]) => {
+    const pts = [];
+    for (let i = 0; i < 10; i++) {
+      const a = i / 10 * Math.PI * 2, r = mr * R * (0.72 + rng() * 0.46);
+      pts.push([cx + mx * R + Math.cos(a) * r, cy + my * R + Math.sin(a) * r]);
+    }
+    return `<path d="${smooth(pts)}"/>`;
+  }).join('');
+  let craters = '';
+  const nC = detail ? 46 : 14;
+  for (let i = 0; i < nC; i++) {
+    const a = rng() * Math.PI * 2, d = Math.sqrt(rng()) * 0.92 * R;
+    const x = cx + Math.cos(a) * d, y = cy + Math.sin(a) * d;
+    const r = (0.012 + Math.pow(rng(), 2.4) * 0.07) * R;
+    craters += `<circle cx="${fx(x)}" cy="${fx(y)}" r="${fx(r)}" fill="#3b3935" opacity=".26"/>` +
+      `<circle cx="${fx(x - r * 0.2)}" cy="${fx(y + r * 0.05)}" r="${fx(r * 0.8)}" fill="#f6f4ee" opacity=".22"/>` +
+      `<circle cx="${fx(x)}" cy="${fx(y)}" r="${fx(r)}" fill="none" stroke="#fbfaf6" stroke-opacity=".14" stroke-width="${fx(Math.max(0.3, r * 0.18))}"/>`;
+  }
+  const tx = cx - 0.12 * R, ty = cy + 0.64 * R;
+  let rays = '';
+  for (let i = 0; i < 16; i++) {
+    const a = rng() * Math.PI * 2, l = R * (0.25 + rng() * 0.75);
+    rays += `<path d="M${P(tx, ty)}L${P(tx + Math.cos(a) * l, ty + Math.sin(a) * l)}" stroke="#f7f5ef" stroke-opacity="${fx(0.05 + rng() * 0.08)}" stroke-width="${fx(0.8 + rng() * 1.4)}" stroke-linecap="round"/>`;
+  }
+  const tOff = ((F < 0.5 ? cx + rx : cx - rx) - (cx - R)) / (2 * R);
+  const tex = `<g id="${id}-tex" clip-path="url(#${id}-d)">
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="url(#${id}-b)"/>
+      <g fill="#5c5a56" opacity=".6" filter="url(#${id}-soft)">${maria}</g>
+      ${craters}${rays}
+      <circle cx="${fx(tx)}" cy="${fx(ty)}" r="2.2" fill="#fdfcf8" opacity=".75"/>
+      ${detail ? `<rect x="${cx - R}" y="${cy - R}" width="${2 * R}" height="${2 * R}" filter="url(#${id}-n)" opacity=".55" style="mix-blend-mode:soft-light"/>` : ''}
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="url(#${id}-limb)"/>
+    </g>`;
+  return `<svg viewBox="${view}" ${attrs}>
+    <defs>
+      <clipPath id="${id}-d"><circle cx="${cx}" cy="${cy}" r="${R}"/></clipPath>
+      <radialGradient id="${id}-b" cx="58%" cy="40%" r="75%">
+        <stop offset="0" stop-color="#f4f2eb"/><stop offset=".55" stop-color="#dcd9d1"/><stop offset="1" stop-color="#aaa69e"/>
+      </radialGradient>
+      <radialGradient id="${id}-limb" cx="50%" cy="50%" r="50%">
+        <stop offset=".72" stop-color="#2a2a33" stop-opacity="0"/><stop offset="1" stop-color="#2a2a33" stop-opacity=".38"/>
+      </radialGradient>
+      <linearGradient id="${id}-term" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="${fx(clamp(tOff - 0.04, 0, 1))}" stop-color="#05070d" stop-opacity=".7"/>
+        <stop offset="${fx(clamp(tOff + (1 - tOff) * 0.3, 0, 1))}" stop-color="#05070d" stop-opacity=".12"/>
+        <stop offset="1" stop-color="#05070d" stop-opacity="0"/>
+      </linearGradient>
+      <radialGradient id="${id}-halo" cx="50%" cy="50%" r="50%">
+        <stop offset=".38" stop-color="#c8d6ff" stop-opacity=".2"/><stop offset="1" stop-color="#c8d6ff" stop-opacity="0"/>
+      </radialGradient>
+      <filter id="${id}-soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="${fx(R * 0.03)}"/></filter>
+      <filter id="${id}-t" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${fx(R * 0.035)}"/></filter>
+      <filter id="${id}-g" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="${fx(R * 0.13)}"/></filter>
+      ${detail ? `<filter id="${id}-n" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".11" numOctaves="4" seed="7"/>
+        <feColorMatrix type="matrix" values=".33 .33 .33 0 0  .33 .33 .33 0 0  .33 .33 .33 0 0  0 0 0 0 1"/></filter>` : ''}
+      <mask id="${id}-m" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200">
+        <path d="${litD}" fill="#fff" filter="url(#${id}-t)"/>
+      </mask>
+      ${tex}
+    </defs>
+    <g transform="rotate(${tilt} ${cx} ${cy})">
+      ${glow ? `<circle cx="${cx}" cy="${cy}" r="${R * 1.55}" fill="url(#${id}-halo)"/>
+      <path d="${litD}" fill="#dfe7fb" opacity=".5" filter="url(#${id}-g)"/>` : ''}
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="#0b1224"/>
+      <use href="#${id}-tex" opacity="${detail ? 0.075 : 0.13}"/>
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="#3b5596" opacity=".08"/>
+      <g mask="url(#${id}-m)">
+        <use href="#${id}-tex"/>
+        <rect x="${cx - R}" y="${cy - R}" width="${2 * R}" height="${2 * R}" fill="url(#${id}-term)" clip-path="url(#${id}-d)"/>
+      </g>
+      ${glow ? '' : `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#c9d1df" stroke-opacity=".22" stroke-width="3"/>`}
+    </g>
+  </svg>`;
+}
+
+function phaseSVG(k, total) {
+  // waxing moon: thin crescent → full, rendered as a real little moon
+  return moonSVG({ id: 'ph' + k, lit: Math.max(0.05, k / total), tilt: 0, detail: false, glow: false,
+    view: '30 30 140 140', attrs: 'class="phase" aria-hidden="true"' });
+}
+
+/* ---------- Character ---------- */
+const HEADS = {
+  oval: [[100, 20], [108.6, 21.2], [114.6, 25.8], [117.1, 33], [117.4, 41], [116.6, 48.6], [114.2, 55.6], [110, 61.6], [105, 65.3], [100, 66.3]],
+  round: [[100, 20], [109.2, 21.4], [115.6, 26.2], [118.3, 33.6], [118.8, 41.6], [118.1, 49.6], [115.8, 56.6], [111.4, 62.2], [105.6, 65.6], [100, 66.4]],
+  angular: [[100, 20], [108.4, 21], [114.4, 25.4], [116.8, 32.6], [117.1, 40.6], [116.9, 48.2], [116, 55.4], [112.6, 60.8], [106.4, 64.9], [100, 65.7]]
+};
+
+function avatarScale(c) {
+  const lo = CONFIG.height.min, hi = CONFIG.height.max;
+  return 0.86 + ((clamp(Number(c.height) || 172, lo, hi) - lo) / (hi - lo)) * 0.16;
+}
+function avatarViewBox(c, view) {
+  const s = avatarScale(c), Y = y => 316 - (316 - y) * s;
+  if (view === 'portrait') { const h = 108 * s, w = h * 200 / 330; return [100 - w / 2, Y(1), w, h].map(fx).join(' '); }
+  if (view === 'face') { const h = 72 * s; return [100 - h / 2, Y(5), h, h].map(fx).join(' '); }
+  return '0 0 200 330';
+}
+
+function hairModel(style, H, rng, I, U) {
+  let defs = '', back = '', front = '', sil = '';
+  const ink = () => { const r = rng(); return r < .36 ? [H.lo, .6] : r < .68 ? [H.base, .55] : r < .92 ? [H.hi, .45] : [H.shine, .38]; };
+  const strand = (d, wMul = 1) => { const [col, op] = ink(); return `<path d="${d}" stroke="${col}" stroke-opacity="${op}" stroke-width="${fx((.26 + rng() * .44) * wMul)}"/>`; };
+  const clip = (n, d) => { defs += `<clipPath id="${I(n)}"><path d="${d}"/></clipPath>`; return `clip-path="${U(n)}"`; };
+  const G = (attr, inner) => `<g ${attr} fill="none" stroke-linecap="round">${inner}</g>`;
+  const sheen = (pts, wd = 2.4, op = .42) => `<path d="${smooth(pts, false)}" stroke="${H.shine}" stroke-width="${wd}" stroke-linecap="round" fill="none" opacity="${op}" filter="${U('b1')}"/>`;
+  const radial = (n, rootA, rootB, tips, bulge) => {
+    let o = '';
+    for (let i = 0; i < n; i++) {
+      const r = lerp2(rootA, rootB, rng()), t = samplePoly(tips, rng());
+      const tp = [t[0] + (rng() - .5) * .8, t[1] + (rng() - .5) * .6];
+      const m = lerp2(r, tp, .5), dx = m[0] - 100, dy = m[1] - 44, l = Math.hypot(dx, dy) || 1;
+      const k = bulge * (.7 + rng() * .6);
+      o += strand(`M${P(r[0], r[1])}Q${P(m[0] + dx / l * k, m[1] + dy / l * k)} ${P(tp[0], tp[1])}`);
+    }
+    return o;
+  };
+  const flow = (inner, outer, n) => {
+    let o = '';
+    for (let i = 0; i < n; i++) {
+      const u = rng(), cut = inner.length - (rng() < .3 ? 1 : 0);
+      const pts = inner.slice(0, cut).map((pi, k) => [lerp(pi[0], outer[k][0], u) + (rng() - .5) * .7, lerp(pi[1], outer[k][1], u) + (rng() - .5) * .5]);
+      o += strand(smooth(pts, false));
+    }
+    return o;
+  };
+  const curl = (x, y, r) => `<circle cx="${fx(x)}" cy="${fx(y)}" r="${fx(r)}" fill="${U('curl')}"/>` +
+    `<path d="M${P(x - r * .55, y + r * .1)}A${fx(r * .55)} ${fx(r * .55)} 0 1 1 ${P(x + r * .15, y + r * .5)}" fill="none" stroke="${H.hi}" stroke-opacity=".5" stroke-width=".42" stroke-linecap="round"/>` +
+    `<path d="M${P(x + r * .5, y - r * .2)}A${fx(r * .7)} ${fx(r * .7)} 0 0 1 ${P(x - r * .2, y + r * .72)}" fill="none" stroke="${H.lo}" stroke-opacity=".55" stroke-width=".5" stroke-linecap="round"/>`;
+  const flyaways = (poly, n) => {
+    let o = '';
+    for (let i = 0; i < n; i++) {
+      const p = samplePoly(poly, rng()), dx = p[0] - 100, dy = p[1] - 40, l = Math.hypot(dx, dy) || 1;
+      const ex = dx / l, ey = dy / l, k = 3 + rng() * 3;
+      o += `<path d="M${P(p[0] - ex, p[1] - ey)}Q${P(p[0] + ex * k * .5 + (rng() - .5) * 3, p[1] + ey * k * .5 + (rng() - .5) * 3)} ${P(p[0] + ex * k, p[1] + ey * k)}" stroke="${H.hi}" stroke-opacity=".35" stroke-width=".2" fill="none"/>`;
+    }
+    return o;
+  };
+
+  switch (style) {
+    case 'long': {
+      const backR = [[100, 13.2], [111, 14.8], [118.8, 21.4], [122.6, 32], [123.6, 46], [124.2, 62], [126, 80], [128.2, 97], [126.8, 109], [119.6, 113.8], [111, 110], [100, 106]];
+      const bd = smooth(mirrorPts(backR));
+      let bs = '';
+      for (const side of [-1, 1]) bs += flow(flipX([[112, 30], [116, 50], [118, 70], [121, 90], [120, 108]], side), flipX([[122, 32], [123.6, 50], [125, 70], [127.6, 92], [126, 108]], side), 16);
+      back = `<path d="${bd}" fill="${U('hgd')}"/>` + G(clip('hb', bd), bs);
+      const OUT = [[101.5, 14.6], [111, 15.8], [118, 21.6], [121.2, 31], [122.2, 45], [122.6, 61], [124, 78], [125.6, 95], [123.4, 109]];
+      const INN = [[101.2, 15.6], [103.4, 24.2], [109.4, 27], [114.6, 32.6], [116.6, 44], [116.2, 57], [115.6, 70], [116.4, 86], [119.4, 107]];
+      for (const side of [-1, 1]) {
+        const o = flipX(OUT, side), n = flipX(INN, side), tip = flipX([[121.6, 111.4]], side)[0];
+        const d = smooth([...o, tip, ...n.slice().reverse()]);
+        front += `<path d="${d}" fill="${U('hg')}"/>` +
+          G(clip('hl' + (side > 0 ? 'r' : 'l'), d), flow(n, o, 40) + sheen(flipX([[103, 17.4], [110, 17.8], [116, 22.4], [119.2, 30.5]], side), 2.2, .45));
+        sil += `<path d="${d}"/>`;
+      }
+      break;
+    }
+    case 'bun': {
+      const outer = [[83, 45.4], [82.2, 35], [85.4, 25], [92, 18.8], [100, 16.8], [108, 18.8], [114.6, 25], [117.8, 35], [117, 45.4]];
+      const hl = [[116.3, 45.4], [115.5, 37.2], [112.1, 31.6], [106.2, 29.3], [100, 28.9], [93.8, 29.3], [87.9, 31.6], [84.5, 37.2], [83.7, 45.4]];
+      const d = smooth([...outer, ...hl]);
+      const bp = [];
+      for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2, r = 8.6 * (.93 + rng() * .12); bp.push([100 + Math.cos(a) * r * 1.05, 10.6 + Math.sin(a) * r * .9]); }
+      const bd = smooth(bp);
+      let sw = '';
+      for (let i = 0; i < 18; i++) {
+        const r = 1.5 + rng() * 6.6, a0 = rng() * 6.28, sp = 1.6 + rng() * 2.6;
+        const p0 = [100 + Math.cos(a0) * r * 1.05, 10.6 + Math.sin(a0) * r * .9], p1 = [100 + Math.cos(a0 + sp) * r * 1.05, 10.6 + Math.sin(a0 + sp) * r * .9];
+        sw += strand(`M${P(p0[0], p0[1])}A${fx(r * 1.05)} ${fx(r * .9)} 0 ${sp > Math.PI ? 1 : 0} 1 ${P(p1[0], p1[1])}`);
+      }
+      back = `<path d="${bd}" fill="${U('curl')}"/>` + G(clip('hbun', bd), sw);
+      front = `<path d="${d}" fill="${U('hg')}" filter="${U('b03')}"/>` +
+        G(clip('hc', d), radial(90, [95, 17.6], [105, 17.6], hl, 2.2) + radial(30, [96, 18], [104, 18], outer, 1.6) + sheen([[89, 24], [100, 18.6], [111, 24]], 2, .38)) +
+        `<ellipse cx="100" cy="18.2" rx="4.4" ry="1.4" fill="${H.lo}"/>` + flyaways(outer.slice(1, -1), 6);
+      sil = `<path d="${d}"/>`;
+      break;
+    }
+    case 'curly': {
+      const mp = [];
+      for (let i = 0; i < 28; i++) {
+        const a = i / 28 * Math.PI * 2, rr = 1 + .06 * Math.sin(a * 9 + 1.3) + (rng() - .5) * .07;
+        mp.push([100 + Math.cos(a) * 30 * rr, 38 + Math.sin(a) * (Math.sin(a) > 0 ? 24 : 29) * rr]);
+      }
+      const md = smooth(mp);
+      let tx = '';
+      for (let i = 0; i < 380; i++) {
+        const a = rng() * Math.PI * 2, rr = Math.sqrt(rng()), x = 100 + Math.cos(a) * 29 * rr, y = 38 + Math.sin(a) * 27 * rr;
+        const r = .7 + rng() * 1.1, a0 = rng() * 6.28, sp = 2 + rng() * 2.5;
+        tx += strand(`M${P(x + Math.cos(a0) * r, y + Math.sin(a0) * r)}A${fx(r)} ${fx(r)} 0 ${sp > Math.PI ? 1 : 0} 1 ${P(x + Math.cos(a0 + sp) * r, y + Math.sin(a0 + sp) * r)}`, 1.1);
+      }
+      let edge = '';
+      for (let i = 0; i < 56; i++) { const a = Math.PI * (.84 + i / 55 * 1.32), j = .96 + rng() * .08; edge += curl(100 + Math.cos(a) * 29.2 * j, 38 + Math.sin(a) * 27.6 * j, 2 + rng() * 1.3); }
+      back = `<path d="${md}" fill="${U('hgd')}"/>` + G(clip('hb', md), tx) + edge;
+      const fr = [];
+      for (let i = 0; i < 30; i++) { const a = Math.PI * (1.06 + i / 29 * .88), j = .97 + rng() * .07; fr.push([100 + Math.cos(a) * 18.4 * j, 37.6 + Math.sin(a) * 18.2 * j, 2.1 + rng() * 1.1]); }
+      for (let i = 0; i < 14; i++) { const a = Math.PI * (1.12 + i / 13 * .76); fr.push([100 + Math.cos(a) * 21.5, 37 + Math.sin(a) * 21, 2.3 + rng() * 1]); }
+      for (const side of [-1, 1]) for (let k = 0; k < 6; k++) fr.push([100 + side * (18.4 + rng() * 1.4), 41 + k * 3.1, 2.2 + rng() * .9]);
+      front = fr.map(([x, y, r]) => curl(x, y, r)).join('');
+      sil = fr.map(([x, y, r]) => `<circle cx="${fx(x)}" cy="${fx(y)}" r="${fx(r)}"/>`).join('');
+      break;
+    }
+    case 'shaved': {
+      const outer = [[83.4, 45], [82.7, 35], [85.9, 25.4], [92.3, 20.2], [100, 19.1], [107.7, 20.2], [114.1, 25.4], [117.3, 35], [116.6, 45]];
+      const hl = [[116, 45], [115.3, 37.4], [112, 32], [106.2, 29.6], [100, 29.2], [93.8, 29.6], [88, 32], [84.7, 37.4], [84, 45]];
+      const d = smooth([...outer, ...hl]);
+      front = `<path d="${d}" fill="${H.lo}" opacity=".38" filter="${U('b06')}"/><path d="${d}" fill="${U('stub')}" opacity=".9" filter="${U('b03')}"/>`;
+      break;
+    }
+    default: { // short, side part
+      const outer = [[82.2, 46.8], [80.9, 38], [81.7, 29.4], [85.3, 21.4], [92, 16.1], [100.6, 14.3], [109.3, 15.3], [116.1, 20], [119.3, 28.2], [119.5, 37], [118, 46.8]];
+      const hl = [[116.8, 46.8], [116.3, 39.6], [114.6, 33.8], [110.6, 30.3], [105.6, 29.1], [99, 29.5], [92.4, 30.3], [87.6, 32.3], [84.6, 36.5], [83.5, 46.8]];
+      const d = smooth([...outer, ...hl]);
+      front = `<path d="${d}" fill="${U('hg')}" filter="${U('b03')}"/>` +
+        G(clip('hc', d), radial(80, [106.8, 14.8], [105.6, 27], hl, 2.4) + radial(46, [106.8, 14.8], [104.5, 21], outer, 1.2) +
+          sheen([[88, 23], [96, 17.6], [104, 16.4], [112, 19.6]])) + flyaways(outer.slice(2, -2), 4);
+      sil = `<path d="${d}"/>`;
+    }
+  }
+  return { defs, back, front, sil };
+}
+
+function avatarSVG(c, uid, view = 'body') {
+  const I = n => `${uid}-${n}`, U = n => `url(#${uid}-${n})`;
+  const skin = CONFIG.skin[c.skin] || CONFIG.skin[2];
+  const hairDef = CONFIG.hairColor.find(h => h.id === c.hairColor) || CONFIG.hairColor[0];
+  const eyeDef = CONFIG.eyeColor[c.eyeColor] || CONFIG.eyeColor[0];
+  const hair = hairDef.c, eyeC = eyeDef.c;
+  const b = clamp(Number(c.build) || 0, 0, 100) / 100;
+  const s = avatarScale(c);
+  const pers = c.personality || {};
+  const smile = clamp(((pers.social ?? 50) - 50) / 50, -1, 1);   // expression follows temperament
+  const bold = clamp(((pers.risk ?? 50) - 50) / 50, -1, 1);
+  const domSide = c.hand === 'left' ? 1 : -1;                    // character's right hand sits on the viewer's left
+
+  const S = { base: skin, hi: mix(skin, '#fff3ea', .3), lo: mix(skin, '#5a2414', .32), deep: mix(skin, '#2a0c06', .55),
+    lip: mix(mix(skin, '#a8424c', .42), '#2a0c08', .08), blush: mix(skin, '#d2524e', .5) };
+  const H = { base: hair, hi: mix(hair, '#ffffff', .3), lo: mix(hair, '#000000', .45), shine: mix(hair, '#ffffff', .55),
+    brow: mix(hair, '#1a120e', hairDef.id === 'silver' || hairDef.id === 'blonde' ? .35 : .12) };
+  const E = { iris: eyeC, hi: mix(eyeC, '#e9d9b0', .38), lo: mix(eyeC, '#000000', .5) };
+  const TOP = '#5b6782', JEAN = '#25334f';
+  const T = { hi: mix(TOP, '#ffffff', .16), lo: mix(TOP, '#05070d', .5) };
+  const J = { hi: mix(JEAN, '#9fb3d6', .22), lo: mix(JEAN, '#02040a', .5) };
+  const hm = hairModel(c.hairStyle, H, seeded(hash('hair:' + c.hairStyle)), I, U);
+
+  /* body geometry — build widens shoulders, chest, waist and limbs */
+  const nw = 8.4 + b * 2.4, sw = 23 + b * 9, cw = 19 + b * 8, ww = 15.5 + b * 7.5, hw = 17.5 + b * 6.5;
+  const headD = smooth(mirrorPts(HEADS[c.face] || HEADS.oval));
+  const torsoD = smooth(mirrorPts([[100, 78.8], [100 + nw + 2.4, 75.6], [100 + sw - 7, 78.8], [100 + sw - 1.6, 82.8], [100 + sw + .2, 90],
+    [100 + cw + 1.8, 104], [100 + cw + .4, 119], [100 + ww + .6, 142], [100 + hw + .3, 164], [100 + hw - .2, 174], [100, 175.6]]));
+  const neckD = `M${P(100 - nw, 50)}L${P(100 - nw - .3, 70)}C${P(100 - nw - .8, 74)} ${P(100 - nw - 3, 76.4)} ${P(100 - nw - 6, 77.6)}Q100 84 ${P(100 + nw + 6, 77.6)}C${P(100 + nw + 3, 76.4)} ${P(100 + nw + .8, 74)} ${P(100 + nw + .3, 70)}L${P(100 + nw, 50)}Z`;
+  const pelvisD = smooth([[100 - hw + .6, 158], [100 + hw - .6, 158], [100 + hw - .4, 176], [103, 187], [97, 187], [100 - hw + .4, 176]]);
+  const legs = [-1, 1].map(side => {
+    const hx = 100 + side * hw * .47, kx = 100 + side * (hw * .4 + .8), ax = 100 + side * (8.4 + b * 1.6);
+    const pts = [[hx, 166, 9.6 + 4.2 * b], [lerp(hx, kx, .45), 200, 8.9 + 3.7 * b], [kx, 236, 6.5 + 2.1 * b], [lerp(kx, ax, .4), 262, 6.8 + 2.2 * b], [ax, 297, 5.9 + 1.1 * b]];
+    return { side, hx, kx, ax, d: tube(pts), seam: smooth(pts.slice(0, -1).concat([[ax, 302, 5.9 + 1.1 * b]]).map(([x, y, w]) => [x + side * (w - 1.4), y]), false) };
+  });
+
+  /* defs */
+  const lg = (n, stops, v = false) => `<linearGradient id="${I(n)}" x1="0" y1="0" x2="${v ? 0 : 1}" y2="${v ? 1 : 0}">${stops.map(([o, col, op = 1]) => `<stop offset="${o}" stop-color="${col}" stop-opacity="${op}"/>`).join('')}</linearGradient>`;
+  const rg = (n, stops, cx = '50%', cy = '50%', r = '50%') => `<radialGradient id="${I(n)}" cx="${cx}" cy="${cy}" r="${r}">${stops.map(([o, col, op = 1]) => `<stop offset="${o}" stop-color="${col}" stop-opacity="${op}"/>`).join('')}</radialGradient>`;
+  const blur = (n, sd, pad = 50) => `<filter id="${I(n)}" x="-${pad}%" y="-${pad}%" width="${100 + 2 * pad}%" height="${100 + 2 * pad}%"><feGaussianBlur stdDeviation="${sd}"/></filter>`;
+  const clipDefs = [];
+  const clip = (n, inner) => { clipDefs.push(`<clipPath id="${I(n)}">${inner}</clipPath>`); return `clip-path="${U(n)}"`; };
+
+  /* face */
+  const eyeY = 43.6;
+  const eye = side => {
+    const cx = 100 + side * 7.6, inX = cx - side * 3.9, outX = cx + side * 4;
+    const top = eyeY - 2.25, bot = eyeY + 1.55 - .45 * Math.max(0, smile);
+    const up = [[inX, eyeY + .35], [inX + side * 1.4, top], [outX - side * 2.2, top - .35], [outX, eyeY - .45]];
+    const upper = `M${P(...up[0])}C${P(...up[1])} ${P(...up[2])} ${P(...up[3])}`;
+    const lowerBack = `C${P(outX - side * 1.6, bot + .15)} ${P(inX + side * 1.8, bot + .4)} ${P(inX, eyeY + .35)}`;
+    const d = upper + lowerBack + 'Z';
+    const crease = `M${P(inX + side * .4, eyeY - 1.2)}C${P(inX + side * 1.6, top - 1.5)} ${P(outX - side * 2, top - 1.9)} ${P(outX + side * .5, eyeY - 1.6)}`;
+    const ix = cx - side * .2, iy = eyeY - .15;
+    let spokes = '';
+    for (let k = 0; k < 14; k++) { const a = k / 14 * Math.PI * 2; spokes += `M${P(ix + Math.cos(a) * .95, iy + Math.sin(a) * .95)}L${P(ix + Math.cos(a) * 1.95, iy + Math.sin(a) * 1.95)}`; }
+    const lashes = [.2, .38, .55, .7, .84, .97].map(t => { const p = bez(up, t); return `M${P(p[0], p[1])}l${fx(side * .45 * (t + .4))} ${fx(-.75 - t * .25)}`; }).join('');
+    const ec = clip('eye' + (side > 0 ? 'R' : 'L'), `<path d="${d}"/>`);
+    return `
+      <path d="${d}" fill="${U('scl')}"/>
+      <g ${ec}>
+        <circle cx="${fx(ix)}" cy="${fx(iy)}" r="2.05" fill="${U('iris')}"/>
+        <path d="${spokes}" stroke="${E.hi}" stroke-width=".14" opacity=".45"/>
+        <circle cx="${fx(ix)}" cy="${fx(iy)}" r=".8" fill="#07050a"/>
+        <ellipse cx="${fx(cx)}" cy="${fx(top + .3)}" rx="5" ry="1.5" fill="#000" opacity=".34" filter="${U('b06')}"/>
+        <circle cx="${fx(ix - .62)}" cy="${fx(iy - .78)}" r=".46" fill="#fff" opacity=".92"/>
+        <circle cx="${fx(ix + .75)}" cy="${fx(iy + .55)}" r=".2" fill="#fff" opacity=".45"/>
+      </g>
+      <path class="blink" d="${d}" fill="${U('lid')}"/>
+      <path d="${crease}" fill="none" stroke="${S.lo}" stroke-width=".5" opacity=".55" stroke-linecap="round"/>
+      <path d="M${P(outX, eyeY - .45)}${lowerBack}" fill="none" stroke="${S.lo}" stroke-width=".35" opacity=".45"/>
+      <path d="${upper}" fill="none" stroke="#1a100c" stroke-width=".75" stroke-linecap="round" opacity=".9"/>
+      <path d="${lashes}" stroke="#1a100c" stroke-width=".24" stroke-linecap="round" opacity=".7"/>
+      <ellipse cx="${fx(inX + side * .5)}" cy="${fx(eyeY + .35)}" rx=".55" ry=".42" fill="#d8958e" opacity=".7"/>`;
+  };
+  const brow = side => {
+    const iy = 40 + bold * .55, py = 38.1 + bold * .15 - Math.max(0, -bold) * .35, oy = 39.7;
+    const pts = [[100 + side * 3.3, iy, .78], [100 + side * 6.4, (iy + py) / 2 - .35, .74], [100 + side * 9.6, py, .55], [100 + side * 13.3, oy, .18]];
+    let hairs = '';
+    for (let k = 0; k < 16; k++) {
+      const t = k / 15, seg = Math.min(2, Math.floor(t * 3)), lt = t * 3 - seg;
+      const x = lerp(pts[seg][0], pts[seg + 1][0], lt), y = lerp(pts[seg][1], pts[seg + 1][1], lt) + ((k * 7) % 5 - 2) * .14;
+      hairs += `M${P(x - side * .3, y + .35)}l${fx(side * (1 + t * .3))} ${fx(-.55 + t * .4)}`;
+    }
+    return `<path d="${tube(pts, 6)}" fill="${H.brow}" opacity=".8" filter="${U('b03')}"/><path d="${hairs}" stroke="${H.brow}" stroke-width=".22" opacity=".6" stroke-linecap="round"/>`;
+  };
+  const my = 58.7, cY = my + .15 - smile * 1.05, mw = 5.1 + smile * .45, mL = 100 - mw, mR = 100 + mw, mid = my + .25 + Math.max(0, smile) * .15;
+  const upperLip = `M${P(mL, cY)}C${P(97.6, my - 1.05)} ${P(98.9, my - 1.65)} ${P(100, my - 1.05)}C${P(101.1, my - 1.65)} ${P(102.4, my - 1.05)} ${P(mR, cY)}C${P(102.6, mid + .1)} ${P(97.4, mid + .1)} ${P(mL, cY)}Z`;
+  const lowerLip = `M${P(mL + .3, cY + .1)}C${P(97.4, mid + .15)} ${P(102.6, mid + .15)} ${P(mR - .3, cY + .1)}C${P(103.2, my + 3.1)} ${P(96.8, my + 3.1)} ${P(mL + .3, cY + .1)}Z`;
+  const lipLine = `M${P(mL, cY)}C${P(97.4, mid + .1)} ${P(102.6, mid + .1)} ${P(mR, cY)}`;
+  const angular = c.face === 'angular';
+  const faceShade = `
+    <path d="${headD}" fill="none" stroke="${S.lo}" stroke-width="6" opacity=".38" filter="${U('b2')}"/>
+    <ellipse cx="120" cy="46" rx="7" ry="24" fill="${S.lo}" opacity=".42" filter="${U('b2')}"/>
+    <ellipse cx="97" cy="29" rx="9" ry="5" fill="${S.hi}" opacity=".42" filter="${U('b2')}"/>
+    <ellipse cx="83.5" cy="35" rx="2.5" ry="5" fill="${S.lo}" opacity=".22" filter="${U('b1')}"/>
+    <ellipse cx="116.5" cy="35" rx="2.5" ry="5" fill="${S.lo}" opacity=".34" filter="${U('b1')}"/>
+    <ellipse cx="92.4" cy="42.6" rx="5.8" ry="3.4" fill="${S.lo}" opacity=".26" filter="${U('b1')}"/>
+    <ellipse cx="107.6" cy="42.6" rx="5.8" ry="3.4" fill="${S.lo}" opacity=".32" filter="${U('b1')}"/>
+    <ellipse cx="92.3" cy="46.7" rx="3.4" ry="1" fill="${S.lo}" opacity=".16" filter="${U('b06')}"/>
+    <ellipse cx="107.7" cy="46.7" rx="3.4" ry="1" fill="${S.lo}" opacity=".2" filter="${U('b06')}"/>
+    <ellipse cx="100" cy="41.2" rx="1.6" ry="3" fill="${S.hi}" opacity=".2" filter="${U('b06')}"/>
+    <ellipse cx="88.6" cy="48.6" rx="3.8" ry="2.2" fill="${S.hi}" opacity=".42" filter="${U('b1')}"/>
+    <ellipse cx="111.6" cy="48.6" rx="3.8" ry="2.2" fill="${S.hi}" opacity=".14" filter="${U('b1')}"/>
+    <ellipse cx="87" cy="55" rx="2.6" ry="5" fill="${S.lo}" opacity="${angular ? .3 : .16}" filter="${U('b1')}"/>
+    <ellipse cx="113" cy="55" rx="2.6" ry="5" fill="${S.lo}" opacity="${angular ? .42 : .24}" filter="${U('b1')}"/>
+    <ellipse cx="89.6" cy="51.4" rx="4.2" ry="2.6" fill="${S.blush}" opacity="${fx(.14 + .1 * Math.max(0, smile))}" filter="${U('b1')}"/>
+    <ellipse cx="110.4" cy="51.4" rx="4.2" ry="2.6" fill="${S.blush}" opacity="${fx(.12 + .1 * Math.max(0, smile))}" filter="${U('b1')}"/>
+    <path d="M102.4 42.4C102.9 45.6 103.4 48.6 103.6 51.6" stroke="${S.lo}" stroke-width="2.4" opacity=".28" fill="none" filter="${U('b1')}"/>
+    <path d="M97.6 41.6C97.2 45.2 96.9 48.4 96.7 51.4" stroke="${S.lo}" stroke-width="1.5" opacity=".22" fill="none" filter="${U('b1')}"/>
+    <path d="M99.7 43C99.6 45.8 99.8 48.6 100.1 50.8" stroke="${S.hi}" stroke-width="1.2" opacity=".32" fill="none" filter="${U('b06')}"/>
+    <ellipse cx="100.1" cy="51.3" rx="1.5" ry="1.1" fill="${S.hi}" opacity=".55" filter="${U('b06')}"/>
+    <ellipse cx="100.4" cy="55.3" rx="2.6" ry="1" fill="${S.lo}" opacity=".45" filter="${U('b06')}"/>
+    <ellipse cx="103.7" cy="53.4" rx="1.1" ry="1.5" fill="${S.lo}" opacity=".35" filter="${U('b06')}"/>
+    <path d="M99.2 55.6L99.1 57.6M100.9 55.6L101 57.6" stroke="${S.lo}" stroke-width=".5" opacity=".22" filter="${U('b03')}"/>
+    ${smile > .15 ? `<path d="M95.6 53.6C94.4 55.6 94.2 57.6 ${P(mL - .6, cY + .4)}M104.4 53.6C105.6 55.6 105.8 57.6 ${P(mR + .6, cY + .4)}" stroke="${S.lo}" stroke-width=".7" fill="none" opacity="${fx(smile * .45)}" filter="${U('b06')}"/>` : ''}
+    <ellipse cx="100" cy="${fx(my + 3.9)}" rx="3.2" ry="1" fill="${S.lo}" opacity=".4" filter="${U('b06')}"/>
+    <ellipse cx="99.5" cy="63.4" rx="3.2" ry="1.6" fill="${S.hi}" opacity=".35" filter="${U('b1')}"/>
+    ${hm.sil ? `<g fill="${S.deep}" opacity=".4" filter="${U('b1')}" transform="translate(.8 1.8)">${hm.sil}</g>` : ''}`;
+  const features = `
+    <path d="M96.5 52.2C95.6 53.8 96.6 55 98.2 54.6C99 55.2 101 55.2 101.8 54.6C103.4 55 104.4 53.8 103.5 52.2" fill="none" stroke="${S.lo}" stroke-width=".55" opacity=".6" stroke-linecap="round"/>
+    <ellipse cx="98.4" cy="54.1" rx=".95" ry=".45" transform="rotate(-18 98.4 54.1)" fill="${S.deep}" opacity=".75"/>
+    <ellipse cx="101.6" cy="54.1" rx=".95" ry=".45" transform="rotate(18 101.6 54.1)" fill="${S.deep}" opacity=".75"/>
+    ${eye(-1)}${eye(1)}${brow(-1)}${brow(1)}
+    <path d="${lowerLip}" fill="${U('ll')}"/>
+    <path d="${upperLip}" fill="${U('lu')}"/>
+    <path d="${lipLine}" fill="none" stroke="${mix(S.lip, '#1a0505', .6)}" stroke-width=".55" stroke-linecap="round"/>
+    <ellipse cx="100.7" cy="${fx(my + 1.45)}" rx="1.9" ry=".5" fill="#fff" opacity=".2" filter="${U('b03')}"/>
+    <circle cx="${fx(mL)}" cy="${fx(cY)}" r=".6" fill="${S.deep}" opacity=".35" filter="${U('b03')}"/>
+    <circle cx="${fx(mR)}" cy="${fx(cY)}" r=".6" fill="${S.deep}" opacity=".35" filter="${U('b03')}"/>`;
+  const earD = 'M116.3 39.4C119.7 37.2 122.1 38.9 121.7 43.1C121.4 47 120.1 50.9 117.6 52.9C116.5 50.4 116.2 44.6 116.3 39.4Z';
+  const ears = [-1, 1].map(side => `<g transform="${side < 0 ? 'matrix(-1 0 0 1 200 0) ' : ''}translate(116.3 46) scale(.8 .88) translate(-116.3 -46)">
+      <path d="${earD}" fill="${side < 0 ? S.base : mix(S.base, S.lo, .45)}"/>
+      <path d="M117.6 41.3C119.6 40.1 120.5 41.9 120.1 44.3C119.7 46.7 119 48.6 118.1 49.8" fill="none" stroke="${S.lo}" stroke-width=".7" opacity=".55"/>
+      <ellipse cx="118.3" cy="45.6" rx="1" ry="2.4" fill="${S.deep}" opacity=".3" filter="${U('b06')}"/>
+    </g>`).join('');
+
+  /* neck & collar */
+  const neck = `<path d="${neckD}" fill="${U('nk')}"/>
+    <g ${clip('nc', `<path d="${neckD}"/>`)}>
+      <ellipse cx="100" cy="64.5" rx="${fx(nw + 4)}" ry="7.5" fill="${S.deep}" opacity=".55" filter="${U('b2')}"/>
+      <path d="M${P(100 + nw - 1.5, 60)}Q${P(103, 70)} ${P(101.8, 77)}" stroke="${S.lo}" stroke-width="1.4" opacity=".3" fill="none" filter="${U('b06')}"/>
+      <path d="M${P(100 - nw + 1.5, 60)}Q${P(97, 70)} ${P(98.2, 77)}" stroke="${S.lo}" stroke-width="1.2" opacity=".18" fill="none" filter="${U('b06')}"/>
+      <ellipse cx="100" cy="77.4" rx="2.2" ry="1.6" fill="${S.lo}" opacity=".4" filter="${U('b06')}"/>
+    </g>`;
+  const backCollar = `<path d="M${P(100 - nw - 5.4, 75.8)}Q100 70.6 ${P(100 + nw + 5.4, 75.8)}L${P(100 + nw + 2.6, 75.6)}Q100 72.8 ${P(100 - nw - 2.6, 75.6)}Z" fill="${T.lo}"/>`;
+  const co = [[100 - nw - 5.4, 75.6], [100 - nw - 3.6, 81], [100 + nw + 3.6, 81], [100 + nw + 5.4, 75.6]];
+  const ci = [[100 + nw + 2.6, 75.4], [100 + nw + 1.4, 78.6], [100 - nw - 1.4, 78.6], [100 - nw - 2.6, 75.4]];
+  let ribs = '';
+  for (let k = 1; k < 18; k++) { const t = k / 18, a = bez(co, t), z = bez(ci, 1 - t); ribs += `M${P(a[0], a[1])}L${P(z[0], z[1])}`; }
+  const collar = `<path d="M${P(...co[0])}C${P(...co[1])} ${P(...co[2])} ${P(...co[3])}L${P(...ci[0])}C${P(...ci[1])} ${P(...ci[2])} ${P(...ci[3])}Z" fill="${mix(TOP, '#000000', .08)}"/>
+    <path d="${ribs}" stroke="#000" stroke-opacity=".25" stroke-width=".45"/>
+    <path d="M${P(...ci[0])}C${P(...ci[1])} ${P(...ci[2])} ${P(...ci[3])}" stroke="#000" stroke-opacity=".35" stroke-width=".5" fill="none"/>`;
+
+  /* sweater */
+  const tf = `M${P(100 - ww + 1.5, 131)}Q${P(100 - ww + 7, 137.5)} ${P(96, 136.5)}M${P(100 + ww - 1.5, 127)}Q${P(100 + ww - 8, 135)} ${P(105, 138.5)}` +
+    `M${P(100 - ww + 2.5, 150)}Q100 156.5 ${P(100 + ww - 2.5, 151)}M${P(100 - cw + 1, 95)}Q${P(100 - cw + 5, 100)} ${P(100 - cw + 9, 99.5)}M${P(100 + cw - 1, 95)}Q${P(100 + cw - 5, 100)} ${P(100 + cw - 9, 99.5)}`;
+  const torso = `<path d="${torsoD}" fill="${U('tp')}"/>
+    <g ${clip('tc', `<path d="${torsoD}"/>`)}>
+      <rect x="50" y="70" width="100" height="110" fill="${U('knit')}"/>
+      <rect x="50" y="70" width="100" height="110" fill="${U('tv')}"/>
+      <ellipse cx="93" cy="104" rx="${fx(9 + 3 * b)}" ry="16" fill="#fff" opacity=".07" filter="${U('b4')}"/>
+      <ellipse cx="100" cy="${fx(117 + 2 * b)}" rx="${fx(cw - 4)}" ry="2.4" fill="#000" opacity="${fx(.1 + .14 * b)}" filter="${U('b2')}"/>
+      <ellipse cx="${fx(100 - cw + 1)}" cy="122" rx="3.2" ry="26" fill="#000" opacity=".26" filter="${U('b2')}"/>
+      <ellipse cx="${fx(100 + cw - 1)}" cy="122" rx="3.6" ry="26" fill="#000" opacity=".42" filter="${U('b2')}"/>
+      <ellipse cx="100" cy="81.5" rx="${fx(nw + 8)}" ry="3.6" fill="#000" opacity=".38" filter="${U('b1')}"/>
+      <path d="${tf}" stroke="#000" stroke-opacity=".24" stroke-width="1.1" fill="none" stroke-linecap="round" filter="${U('b06')}"/>
+      <path d="${tf}" transform="translate(-.5 -1)" stroke="#fff" stroke-opacity=".07" stroke-width=".8" fill="none" stroke-linecap="round"/>
+      <path d="M${P(100 - hw - 3, 166.6)}Q100 168.6 ${P(100 + hw + 3, 166.6)}V180H${fx(100 - hw - 3)}Z" fill="${U('rib')}"/>
+      <path d="M${P(100 - hw - 3, 166.6)}Q100 168.6 ${P(100 + hw + 3, 166.6)}" stroke="#000" stroke-opacity=".32" stroke-width=".7" fill="none"/>
+    </g>`;
+
+  /* arms: pushed-up sleeves, forearms, hands; the watch sits on the non-dominant wrist */
+  const hand = side => `
+    <path d="M-3.3 -1.5C-4 5.6 -4.4 12.8 -3.7 19.8C-3.2 25.4 -.4 28.2 1.5 25.2C3 21.6 4 14 3.9 7.4C3.8 3.8 3.5 .8 3.3 -1.5Z" fill="${U(side > 0 ? 'skX' : 'skXr')}"/>
+    <path d="M3.4 5.6C2.6 8.4 2.6 11.6 3.1 14.4" stroke="${S.lo}" stroke-width=".7" opacity=".3" fill="none" filter="${U('b03')}"/>
+    <path d="M-2.9 18.6C-1.8 20.8 .4 21.8 2.6 20.6M-3.1 21.8C-1.8 23.6 .2 24.2 2 23.4" fill="none" stroke="${S.lo}" stroke-width=".4" opacity=".55"/>
+    <path d="M-2.5 3.4C-4.8 7.6 -5 13.2 -3.3 16.6C-2.5 18 -1 17.4 -1.1 15.3C-1.2 12.1 -.6 8.2 -.3 5.3Z" fill="${mix(S.base, S.hi, .35)}"/>
+    <path d="M-2.4 3.6C-1.2 4.6 -.6 5 -.3 5.3" stroke="${S.lo}" stroke-width=".4" opacity=".4" fill="none"/>
+    <ellipse cx="-2.2" cy="15.6" rx=".75" ry="1.1" fill="${mix(S.base, '#ffe9e0', .35)}" opacity=".8"/>`;
+  const across = (pt, nx, ny, w, bx, by, k) => `M${P(pt[0] - nx * w, pt[1] - ny * w)}Q${P(pt[0] + bx * k, pt[1] + by * k)} ${P(pt[0] + nx * w, pt[1] + ny * w)}`;
+  const arms = [-1, 1].map(side => {
+    const dom = side === domSide;
+    const S0 = [100 + side * (sw - 6.4), 91], E0 = [100 + side * (sw - 1.2 + b * .6), 134];
+    const W0 = [100 + side * (hw + 4.6 - (dom ? 1.4 : 0)), dom ? 175 : 178];
+    const ux = W0[0] - E0[0], uy = W0[1] - E0[1], ul = Math.hypot(ux, uy), dx = ux / ul, dy = uy / ul;
+    const sx = E0[0] - S0[0], sy = E0[1] - S0[1], sl = Math.hypot(sx, sy), ex = sx / sl, ey = sy / sl;
+    const cuff = lerp2(E0, W0, .2);
+    const sleeveD = tube([[S0[0], S0[1], 6.4 + 2.8 * b], [...lerp2(S0, E0, .5), 5.9 + 2.7 * b], [E0[0], E0[1], 5.3 + 2.3 * b], [cuff[0], cuff[1], 5.9 + 2.3 * b]]);
+    const foreD = tube([[E0[0], E0[1], 4.5 + 1.9 * b], [...lerp2(E0, W0, .3), 4.8 + 2.1 * b], [...lerp2(E0, W0, .75), 3.7 + 1.4 * b], [W0[0], W0[1], 3.15 + 1.1 * b]]);
+    const folds = across(lerp2(S0, E0, .58), -ey, ex, (6.2 + 2.8 * b) * .85, ex, ey, 1.6) + across(lerp2(S0, E0, .8), -ey, ex, (5.6 + 2.5 * b) * .85, ex, ey, 1.2) +
+      across(lerp2(E0, W0, .06), -dy, dx, (5.4 + 2.3 * b) * .85, dx, dy, 1.2) + across(lerp2(E0, W0, .15), -dy, dx, (5.7 + 2.3 * b) * .85, -dx, -dy, 1);
+    const handAng = Math.atan2(-ux, uy) * 180 / Math.PI;
+    const wp = lerp2(E0, W0, .84), wa = Math.atan2(uy, ux) * 180 / Math.PI - 90, wr = 3.9 + 1.5 * b;
+    const watch = dom ? '' : `<g transform="translate(${P(wp[0], wp[1])}) rotate(${fx(wa)})">
+        <rect x="${fx(-wr - .3)}" y="-1.7" width="${fx(2 * wr + .6)}" height="3.4" rx="1.2" fill="#1c1f27"/>
+        <rect x="${fx(-wr - .3)}" y="-1.7" width="${fx(2 * wr + .6)}" height="1" rx=".5" fill="#fff" opacity=".08"/>
+        <circle r="2.5" fill="#cfd4dd" stroke="#7f8796" stroke-width=".45"/>
+        <circle r="1.85" fill="#0e1524"/>
+        <path d="M0 0V-1.3M0 0L.95 .35" stroke="#e9edf5" stroke-width=".26" stroke-linecap="round"/>
+        <ellipse cx="-.7" cy="-.9" rx=".7" ry=".35" fill="#fff" opacity=".35"/>
+      </g>`;
+    return `<path d="${foreD}" fill="${U('skX')}"/>
+      <g ${clip('fa' + (side > 0 ? 'r' : 'l'), `<path d="${foreD}"/>`)}>
+        <path d="${across(lerp2(E0, W0, .22), -dy, dx, 6 + 2 * b, dx, dy, 1.2)}" stroke="${S.deep}" stroke-width="2.6" opacity=".5" fill="none" filter="${U('b1')}"/>
+        <ellipse cx="${fx(lerp(E0[0], W0[0], .45) + side * (2.6 + b))}" cy="${fx(lerp(E0[1], W0[1], .45))}" rx="1.4" ry="12" fill="${S.lo}" opacity=".3" filter="${U('b1')}"/>
+      </g>
+      ${watch}
+      <g transform="translate(${P(W0[0], W0[1])}) rotate(${fx(handAng)}) scale(${side} 1)">${hand(side)}</g>
+      <path d="${sleeveD}" fill="${U('tp')}"/>
+      <path d="${sleeveD}" fill="${U('knit')}"/>
+      <path d="${folds}" fill="none" stroke="#000" stroke-opacity=".3" stroke-width=".9" stroke-linecap="round" filter="${U('b06')}"/>
+      <path d="${folds}" transform="translate(-.6 -.7)" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width=".7" stroke-linecap="round"/>`;
+  }).join('');
+
+  /* jeans & sneakers */
+  const stitch = '#c8935a';
+  const jeans = `<path d="${pelvisD}" fill="${U('jx')}"/>
+    ${legs.map(L => `<path d="${L.d}" fill="${U('jx')}"/>`).join('')}
+    <g ${clip('lc', `<path d="${pelvisD}"/>` + legs.map(L => `<path d="${L.d}"/>`).join(''))}>
+      <rect x="40" y="150" width="120" height="160" fill="${U('twill')}"/>
+      ${legs.map(L => `<ellipse cx="${fx(lerp(L.hx, L.kx, .4) - 1.4)}" cy="205" rx="${fx(4 + 1.6 * b)}" ry="17" fill="#a9bde0" opacity=".15" filter="${U('b2')}"/>
+      <ellipse cx="${fx(L.kx - .8)}" cy="238" rx="3.4" ry="6" fill="#a9bde0" opacity=".12" filter="${U('b2')}"/>
+      <path d="M${P(L.kx - 4, 232)}Q${P(L.kx, 234.5)} ${P(L.kx + 4.5, 231.6)}M${P(L.kx - 3.6, 240)}Q${P(L.kx, 242)} ${P(L.kx + 4, 239.4)}" stroke="#000" stroke-opacity=".28" stroke-width=".8" fill="none" filter="${U('b06')}"/>
+      <path d="M${P(L.ax - 5, 287)}Q${P(L.ax, 289.5)} ${P(L.ax + 5, 286.6)}M${P(L.ax - 5.4, 293)}Q${P(L.ax, 295.6)} ${P(L.ax + 5.4, 292.6)}" stroke="#000" stroke-opacity=".3" stroke-width=".8" fill="none" filter="${U('b06')}"/>
+      <path d="${L.seam}" stroke="#000" stroke-opacity=".3" stroke-width=".7" fill="none"/>
+      <path d="${L.seam}" transform="translate(${-L.side * .7} 0)" stroke="${stitch}" stroke-opacity=".45" stroke-width=".3" stroke-dasharray=".9 .7" fill="none"/>`).join('')}
+      <ellipse cx="100" cy="190" rx="4" ry="9" fill="#000" opacity=".5" filter="${U('b2')}"/>
+      <path d="M101.2 174.5V184.5Q101.2 188.4 97.8 189.4" stroke="#000" stroke-opacity=".35" stroke-width=".6" fill="none"/>
+      <path d="M102.2 174.5V184.6Q102.2 189.4 98 190.6" stroke="${stitch}" stroke-opacity=".45" stroke-width=".3" stroke-dasharray=".9 .7" fill="none"/>
+      <ellipse cx="100" cy="177" rx="${fx(hw + 3)}" ry="3" fill="#000" opacity=".5" filter="${U('b1')}"/>
+    </g>`;
+  const shoes = legs.map(L => `<g transform="translate(${P(L.ax + L.side * .8, 300.5)}) scale(${L.side} 1)">
+      <path d="M-6 .5C-6.4 -2.8 5.8 -3.2 6.2 .2L7.8 9.6C8.8 12.6 7.8 14.4 5 14.6L-5.4 14.6C-7.6 14.4 -8.4 12.4 -7.6 9.8Z" fill="${U(L.side > 0 ? 'shX' : 'shXr')}"/>
+      <ellipse cx="0" cy="10.2" rx="6" ry="2.3" fill="#fff" opacity=".35" filter="${U('b06')}"/>
+      <path d="M-3.4 3.2C-1 2.4 1 2.4 3.4 3.2" stroke="#b9b5ad" stroke-width=".5" fill="none"/>
+      <path d="M-2.6 4.6H2.6M-2.8 6.6H2.8M-3 8.6H3" stroke="#a9a59c" stroke-width=".6" stroke-linecap="round"/>
+      <path d="M-8 12.2L8.4 12.2C8.8 14.4 8 16 5.4 16L-5.6 16C-7.8 16 -8.8 14.6 -8 12.2Z" fill="#f3f1ec"/>
+      <path d="M-8 12.2L8.4 12.2" stroke="#9c988f" stroke-width=".5"/>
+      <path d="M-7.4 15.5H6" stroke="#000" stroke-opacity=".28" stroke-width=".7"/>
+    </g>`).join('');
+
+  const label = `Character preview: ${c.face || 'oval'} face, ${(CONFIG.hairStyles.find(h => h.id === c.hairStyle) || CONFIG.hairStyles[0]).label.toLowerCase()} ${hairDef.label.toLowerCase()} hair, ${eyeDef.label.toLowerCase()} eyes`;
+  const defs = `
+    ${blur('b03', .3, 30)}${blur('b06', .6)}${blur('b1', 1.1)}${blur('b2', 2.2)}${blur('b4', 4.2)}
+    <filter id="${I('rim')}" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="1.4" result="a"/>
+      <feOffset in="a" dx="-2" dy="1.4" result="o"/>
+      <feComposite in="SourceAlpha" in2="o" operator="out" result="e"/>
+      <feGaussianBlur in="e" stdDeviation=".5" result="eb"/>
+      <feComposite in="eb" in2="SourceAlpha" operator="in" result="ec"/>
+      <feFlood flood-color="#c4d4ff" flood-opacity=".6"/>
+      <feComposite in2="ec" operator="in" result="rim"/>
+      <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="rim"/></feMerge>
+    </filter>
+    ${rg('fc', [[0, S.hi], [.5, S.base], [1, S.lo]], '42%', '40%', '68%')}
+    ${lg('skX', [[0, S.hi], [.45, S.base], [1, S.lo]])}${lg('skXr', [[0, S.lo], [.55, S.base], [1, S.hi]])}
+    ${lg('nk', [[0, mix(S.base, S.lo, .2)], [.45, mix(S.base, S.lo, .1)], [1, mix(S.lo, S.deep, .3)]])}
+    ${lg('lid', [[0, S.lo], [.7, S.base], [1, mix(S.base, S.lo, .4)]], true)}
+    ${lg('scl', [[0, '#b9b1aa'], [.5, '#efebe6'], [1, '#ddd6cf']], true)}
+    ${rg('iris', [[0, E.hi], [.45, eyeC], [.86, E.lo], [1, '#140c08']])}
+    ${lg('lu', [[0, mix(S.lip, '#000000', .05)], [1, mix(S.lip, '#000000', .28)]], true)}
+    ${lg('ll', [[0, mix(S.lip, '#ffffff', .08)], [1, mix(S.lip, '#000000', .14)]], true)}
+    ${lg('tp', [[0, T.hi], [.42, TOP], [1, T.lo]])}
+    ${lg('tv', [[0, '#000', 0], [.6, '#000', .05], [1, '#000', .3]], true)}
+    ${lg('jx', [[0, J.hi], [.45, JEAN], [1, J.lo]])}
+    ${lg('shX', [[0, '#fbfaf7'], [.5, '#e7e4dd'], [1, '#a7a49e']])}${lg('shXr', [[0, '#a7a49e'], [.5, '#e7e4dd'], [1, '#fbfaf7']])}
+    ${lg('hg', [[0, H.hi], [.3, H.base], [1, H.lo]], true)}
+    ${lg('hgd', [[0, H.base], [1, mix(H.lo, '#000000', .3)]], true)}
+    ${rg('curl', [[0, mix(H.base, H.hi, .55)], [.55, H.base], [1, mix(H.lo, '#000000', .15)]], '38%', '32%', '68%')}
+    ${lg('bd', [[0, '#0d1830'], [.6, '#0a1226'], [1, '#060a16']], true)}
+    ${rg('spot', [[0, '#8ca5e1', .22], [1, '#8ca5e1', 0]])}
+    ${rg('floor', [[0, '#96afe6', .24], [1, '#96afe6', 0]])}
+    <pattern id="${I('knit')}" width="2.2" height="3" patternUnits="userSpaceOnUse"><path d="M.55 0V3" stroke="#000" stroke-opacity=".08" stroke-width=".5"/><path d="M0 1.2L.55 1.9L1.1 1.2M1.1 2.7L1.65 3.4L2.2 2.7" stroke="#000" stroke-opacity=".07" stroke-width=".3" fill="none"/></pattern>
+    <pattern id="${I('rib')}" width="1.4" height="3" patternUnits="userSpaceOnUse"><rect width="1.4" height="3" fill="#000" opacity=".1"/><path d="M.4 0V3" stroke="#000" stroke-opacity=".32" stroke-width=".5"/></pattern>
+    <pattern id="${I('twill')}" width="2" height="2" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><path d="M0 .5H2" stroke="#fff" stroke-opacity=".07" stroke-width=".6"/><path d="M0 1.5H2" stroke="#000" stroke-opacity=".12" stroke-width=".5"/></pattern>
+    <pattern id="${I('stub')}" width="1.3" height="1.3" patternUnits="userSpaceOnUse"><circle cx=".4" cy=".5" r=".28" fill="${H.lo}"/><circle cx="1" cy="1.1" r=".22" fill="${H.lo}"/></pattern>
+    ${hm.defs}`;
+  const figure = `
+    ${hm.back}${backCollar}${neck}${shoes}${jeans}${torso}${arms}${collar}${ears}
+    <path d="${headD}" fill="${U('fc')}"/>
+    <g ${clip('hd', `<path d="${headD}"/>`)}>${faceShade}</g>
+    ${features}
+    ${hm.front}`;
+  return `<svg viewBox="${avatarViewBox(c, view)}" role="img" aria-label="${esc(label)}">
+    <defs>${defs}${clipDefs.join('')}</defs>
+    <rect x="-50" y="-50" width="300" height="430" fill="${U('bd')}"/>
+    <ellipse cx="100" cy="125" rx="98" ry="130" fill="${U('spot')}"/>
+    <ellipse cx="100" cy="318" rx="74" ry="12" fill="${U('floor')}"/>
+    <g transform="translate(100 316) scale(${fx(s)}) translate(-100 -316)">
+      <ellipse cx="100" cy="316.6" rx="${fx(30 + b * 8)}" ry="3.4" fill="#000" opacity=".55" filter="${U('b2')}"/>
+      ${legs.map(L => `<ellipse cx="${fx(L.ax + L.side * .8)}" cy="316.4" rx="8.6" ry="1.5" fill="#000" opacity=".7" filter="${U('b06')}"/>`).join('')}
+      <g filter="${U('rim')}">${figure}</g>
+    </g>
+  </svg>`;
+}
+
+function goalItems(identity) {
+  return identity.goals.map(id => {
+    const preset = CONFIG.goals.find(g => g.id === id);
+    if (preset) return { id, label: preset.label, icon: ICONS[id] };
+    const cg = identity.customGoals.find(g => g.id === id);
+    return cg ? { id, label: cg.label, icon: ICONS.custom } : null;
+  }).filter(Boolean);
+}
+
+function constellationSVG(items) {
+  const W = 400, H = 330, cx = 200, cy = 165, R = 104;
+  const rng = seeded(97);
+  let dust = '';
+  for (let i = 0; i < 80; i++) {
+    const m = Math.pow(rng(), 3);
+    dust += `<circle cx="${fx(rng() * W)}" cy="${fx(rng() * H)}" r="${fx(.35 + m * 1.1)}" fill="${rng() < .2 ? '#ffe9c8' : '#dfe6f5'}" opacity="${fx(.12 + m * .5)}"/>`;
+  }
+  const defs = `<defs><radialGradient id="cgl"><stop offset="0" stop-color="#ffffff" stop-opacity=".95"/><stop offset=".16" stop-color="#d4e0ff" stop-opacity=".55"/>
+    <stop offset=".45" stop-color="#a8bbe2" stop-opacity=".13"/><stop offset="1" stop-color="#a8bbe2" stop-opacity="0"/></radialGradient></defs>`;
+  const centerMoon = `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#c9d1df" stroke-opacity=".08" stroke-dasharray="2 6"/>
+    ${moonSVG({ id: 'mc', lit: .3, tilt: -30, detail: false, glow: true, attrs: `x="${cx - 30}" y="${cy - 30}" width="60" height="60" aria-hidden="true"` })}`;
+  if (!items.length) {
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="No goals selected yet">${defs}${dust}${centerMoon}
+      <text class="empty" x="${cx}" y="${cy + 54}" text-anchor="middle">Choose goals and they appear here as stars</text></svg>`;
+  }
+  const n = items.length;
+  const pts = items.map((it, i) => {
+    const a = (-90 + i * (360 / n) + (n > 1 ? (hash(it.label) % 14) - 7 : 0)) * Math.PI / 180;
+    const r = R * (0.72 + (hash(it.id) % 28) / 100);
+    return { ...it, a, x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r, r };
+  });
+  let lines = '';
+  if (n > 1) {
+    const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ') + (n > 2 ? ' Z' : '');
+    lines = `<path d="${d}" fill="none" stroke="#a8bbe2" stroke-opacity=".32" stroke-width=".9"/>`;
+  }
+  const spokes = pts.map(p => `<line x1="${cx}" y1="${cy}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}" stroke="#a8bbe2" stroke-opacity=".07"/>`).join('');
+  const stars = pts.map((p, i) => {
+    const lx = cx + Math.cos(p.a) * (p.r + 18), ly = cy + Math.sin(p.a) * (p.r + 18);
+    const cos = Math.cos(p.a), sin = Math.sin(p.a);
+    const anchor = cos > 0.3 ? 'start' : cos < -0.3 ? 'end' : 'middle';
+    const dy = sin > 0.6 ? 12 : sin < -0.6 ? -4 : 4;
+    const label = p.label.length > 16 ? p.label.slice(0, 15) + '…' : p.label;
+    const x = p.x.toFixed(1), y = p.y.toFixed(1), warm = hash(p.id) % 3 === 0;
+    return `<g class="star-in" style="animation-delay:${i * 40}ms">
+      <circle class="tw" style="animation-delay:${(hash(p.id) % 30) / 10}s" cx="${x}" cy="${y}" r="17" fill="url(#cgl)"/>
+      <ellipse cx="${x}" cy="${y}" rx="10" ry=".45" fill="#e6edff" opacity=".5"/>
+      <ellipse cx="${x}" cy="${y}" rx=".45" ry="10" fill="#e6edff" opacity=".5"/>
+      <circle cx="${x}" cy="${y}" r="2.4" fill="${warm ? '#fff3df' : '#ffffff'}"/>
+      <text x="${lx.toFixed(1)}" y="${(ly + dy).toFixed(1)}" text-anchor="${anchor}">${esc(label)}</text>
+    </g>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Selected goals: ${esc(items.map(i => i.label).join(', '))}">${defs}${dust}${centerMoon}${spokes}${lines}${stars}</svg>`;
+}
+
+/* =========================================================
+   5. SCREENS — each module: mount (once), sync (on change)
+   ========================================================= */
+const Screens = {};
+
+Screens.intro = {
+  nav: null,
+  mount(el) {
+    const total = CONFIG.rules.length;
+    el.innerHTML = `<div class="intro">
+      <div class="moon-wrap">${moonSVG()}</div>
+      <h1 class="title">LIFE</h1>
+      <p class="subtitle">A game without a fixed ending.</p>
+      <p class="kicker">Rules of this world</p>
+      <ol class="rules">
+        ${CONFIG.rules.map((r, i) => `<li class="rule">
+          ${phaseSVG(i + 1, total)}
+          <h3>${esc(r.t)}</h3>
+          <p>${esc(r.d)}</p>
+          ${r.res ? `<div class="res">${r.res.map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
+        </li>`).join('')}
+      </ol>
+      <button class="btn primary btn-start" data-go="character">Start game</button>
+      <p class="intro-note">Your choices are saved on this device.</p>
+    </div>`;
+  }
+};
+
+Screens.character = {
+  nav: { back: 'intro', next: 'identity', hint: 'Everything can be changed later' },
+  tab: 'appearance',
+  view: 'body',
+  mount(el) {
+    const c = CONFIG;
+    const segs = (path, list) => `<div class="seg" role="radiogroup">${list.map(o =>
+      `<button class="opt" role="radio" data-set="${path}" data-value="${o.id}">${esc(o.label)}</button>`).join('')}</div>`;
+    el.innerHTML = `
+      <header class="screen-head">
+        <h2>Character Creation</h2>
+        <p class="lede">Shape who enters the world. Some things you choose, some are given at birth.</p>
+      </header>
+      <div class="editor">
+        <aside class="avatar-panel">
+          <div class="avatar-stage" id="avatarStage"></div>
+          <dl class="stats">
+            <div><dt>Height</dt><dd class="mono" data-out="height"></dd></div>
+            <div><dt>Build</dt><dd data-out="buildLabel"></dd></div>
+            <div><dt>Genome</dt><dd class="mono" data-out="genomeShort"></dd></div>
+          </dl>
+          <div class="avatar-actions"><div class="seg view-toggle" role="radiogroup" aria-label="Preview"><button class="opt" role="radio" data-view="body">Full body</button><button class="opt" role="radio" data-view="portrait">Portrait</button></div><button class="btn ghost small" data-action="randomize">Randomize</button></div>
+        </aside>
+        <div class="tabs-wrap">
+          <div class="tabs" role="tablist" aria-label="Character categories">
+            ${[['appearance', 'Appearance'], ['body', 'Body'], ['personality', 'Personality'], ['traits', 'Traits'], ['genetics', 'Genetics']]
+              .map(([id, label]) => `<button class="tab" role="tab" id="tab-${id}" aria-controls="tp-${id}" data-tab="${id}">${label}</button>`).join('')}
+          </div>
+
+          <div class="tabpanel" id="tp-appearance" role="tabpanel" aria-labelledby="tab-appearance">
+            <div class="field"><span class="label">Skin tone</span>
+              <div class="swatches" role="radiogroup" aria-label="Skin tone">${c.skin.map((s, i) =>
+                `<button class="sw" role="radio" style="--c:${s}" aria-label="Skin tone ${i + 1}" data-set="skin" data-num data-value="${i}"></button>`).join('')}</div></div>
+            <div class="field"><span class="label">Face shape</span>${segs('face', c.faceShapes)}</div>
+            <div class="field"><span class="label">Hair style</span>${segs('hairStyle', c.hairStyles)}</div>
+            <div class="field"><span class="label">Hair color <span class="val" data-out="hairColorLabel"></span></span>
+              <div class="swatches" role="radiogroup" aria-label="Hair color">${c.hairColor.map(h =>
+                `<button class="sw" role="radio" style="--c:${h.c}" aria-label="${h.label}" data-set="hairColor" data-value="${h.id}"></button>`).join('')}</div></div>
+            <div class="field"><span class="label">Eye color <span class="val" data-out="eyeLabel"></span></span>
+              <div class="swatches" role="radiogroup" aria-label="Eye color">${c.eyeColor.map((e, i) =>
+                `<button class="sw" role="radio" style="--c:${e.c}" aria-label="${e.label}" data-set="eyeColor" data-num data-value="${i}"></button>`).join('')}</div></div>
+          </div>
+
+          <div class="tabpanel" id="tp-body" role="tabpanel" aria-labelledby="tab-body" hidden>
+            <div class="field"><label for="rng-height">Height <span class="val" data-out="height"></span></label>
+              <input type="range" id="rng-height" data-set="height" min="${c.height.min}" max="${c.height.max}" step="1"></div>
+            <div class="field"><label for="rng-build">Build <span class="val" data-out="buildLabel"></span></label>
+              <input type="range" id="rng-build" data-set="build" min="0" max="100" step="1"></div>
+            <div class="field"><span class="label">Dominant hand</span>${segs('hand', c.hands)}</div>
+          </div>
+
+          <div class="tabpanel" id="tp-personality" role="tabpanel" aria-labelledby="tab-personality" hidden>
+            <p class="hint">Temperament sits on a spectrum. The middle is a real answer too.</p>
+            ${c.personality.map(p => `<div class="field pole-row">
+              <div class="poles"><b>${p.left}</b><b>${p.right}</b></div>
+              <input type="range" class="bipolar" id="rng-p-${p.id}" data-set="personality.${p.id}" min="0" max="100" step="1" aria-label="${p.left} to ${p.right}">
+              <span class="lean" data-out="lean-${p.id}"></span>
+            </div>`).join('')}
+          </div>
+
+          <div class="tabpanel" id="tp-traits" role="tabpanel" aria-labelledby="tab-traits" hidden>
+            <div class="field"><span class="label">Basic traits <span class="val" data-out="traitCount"></span></span>
+              <p class="hint">Pick up to ${c.maxTraits}. Tap a selected trait to release it.</p>
+              <div class="seg">${c.traits.map(t => `<button class="opt" data-toggle="traits" data-value="${esc(t)}">${esc(t)}</button>`).join('')}</div>
+            </div>
+          </div>
+
+          <div class="tabpanel" id="tp-genetics" role="tabpanel" aria-labelledby="tab-genetics" hidden>
+            <p class="hint">Genetics are given at birth, on a scale of 1 to 10. No two players start with the same set.</p>
+            <div class="genes" id="genes"></div>
+            <div class="genes-foot"><span class="mono" data-out="genome"></span><button class="btn ghost small" data-action="roll">Roll again</button></div>
+          </div>
+        </div>
+      </div>`;
+    this.selectTab(this.tab);
+  },
+  selectTab(id) {
+    this.tab = id;
+    $$('[data-screen="character"] .tab').forEach(t => {
+      const on = t.dataset.tab === id;
+      t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1;
+    });
+    $$('[data-screen="character"] .tabpanel').forEach(p => { p.hidden = p.id !== 'tp-' + id; });
+  },
+  setView(v) {
+    if (v === this.view) return;
+    const stage = $('#avatarStage'), old = stage.querySelector('svg');
+    const from = old && old.getAttribute('viewBox');
+    this.view = v;
+    this.sync(Store.get());
+    const svg = stage.querySelector('svg'), to = svg.getAttribute('viewBox');
+    if (!from || reducedMotion()) return;
+    const A = from.split(/\s+/).map(Number), B = to.split(/\s+/).map(Number), t0 = performance.now();
+    svg.setAttribute('viewBox', from);
+    const tick = now => {
+      if (!svg.isConnected) return;
+      const k = Math.min(1, (now - t0) / 560), e = 1 - Math.pow(1 - k, 3);
+      svg.setAttribute('viewBox', A.map((a, i) => (a + (B[i] - a) * e).toFixed(2)).join(' '));
+      if (k < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  },
+  sync(s) {
+    const c = s.character;
+    const root = $('[data-screen="character"]');
+    $('#avatarStage', root).innerHTML = avatarSVG(c, 'e', this.view);
+    $$('[data-view]', root).forEach(b => b.setAttribute('aria-checked', b.dataset.view === this.view));
+    $$('[data-set][data-value]', root).forEach(b => {
+      b.setAttribute('aria-checked', String(getPath(c, b.dataset.set)) === b.dataset.value);
+    });
+    $$('input[type=range][data-set]', root).forEach(r => {
+      const v = getPath(c, r.dataset.set);
+      if (String(r.value) !== String(v)) r.value = v;
+      r.style.setProperty('--p', ((v - r.min) / (r.max - r.min) * 100) + '%');
+    });
+    const full = c.traits.length >= CONFIG.maxTraits;
+    $$('[data-toggle="traits"]', root).forEach(b => {
+      const on = c.traits.includes(b.dataset.value);
+      b.setAttribute('aria-pressed', on);
+      b.setAttribute('aria-disabled', !on && full);
+    });
+    const out = {
+      height: c.height + ' cm',
+      buildLabel: buildLabel(c.build),
+      genome: c.genetics.code,
+      genomeShort: c.genetics.code.split('-')[1] || '',
+      traitCount: `${c.traits.length} of ${CONFIG.maxTraits}`,
+      hairColorLabel: (CONFIG.hairColor.find(h => h.id === c.hairColor) || {}).label || '',
+      eyeLabel: (CONFIG.eyeColor[c.eyeColor] || {}).label || ''
+    };
+    CONFIG.personality.forEach(p => { out['lean-' + p.id] = lean(c.personality[p.id], p.left, p.right); });
+    $$('[data-out]', root).forEach(o => { if (o.dataset.out in out) o.textContent = out[o.dataset.out]; });
+    $('#genes', root).innerHTML = CONFIG.genetics.map(g => {
+      const v = c.genetics.values[g.id] || 0;
+      return `<div class="gene"><span>${g.label}</span>
+        <div class="pips" aria-hidden="true">${Array.from({ length: 10 }, (_, i) => `<i class="${i < v ? 'on' : ''}"></i>`).join('')}</div>
+        <b class="mono">${v}</b></div>`;
+    }).join('');
+  }
+};
+
+Screens.identity = {
+  nav: { back: 'character', next: 'summary', hint: '' },
+  mount(el) {
+    el.innerHTML = `
+      <header class="screen-head">
+        <h2>Who are you?</h2>
+        <p class="lede">Name your player and choose what you want from this life. Pick as many goals as feel true. They can change later.</p>
+      </header>
+      <div class="identity">
+        <div class="id-form">
+          <div class="field"><label for="player-name">Player name</label>
+            <input class="text-in" id="player-name" maxlength="24" autocomplete="off" spellcheck="false" placeholder="Enter a name"></div>
+          <div class="field"><span class="label">Goals <span class="val" data-out="goalCount"></span></span>
+            <div class="goal-grid" id="goalGrid"></div></div>
+          <div class="field"><label for="custom-goal">Add your own goal</label>
+            <div class="add-row">
+              <input class="text-in" id="custom-goal" maxlength="28" autocomplete="off" placeholder="Raise a family, sail the world…">
+              <button class="btn ghost" data-action="addGoal">Add</button>
+            </div>
+            <p class="error" id="customError" role="alert" hidden></p>
+          </div>
+          <p class="error" id="idError" role="alert" hidden></p>
+        </div>
+        <aside class="id-visual" aria-live="polite">
+          <div class="cap"><strong data-out="nameDisplay"></strong><span data-out="starCount"></span></div>
+          <div class="constellation" id="constellation"></div>
+        </aside>
+      </div>`;
+  },
+  sync(s) {
+    const id = s.identity;
+    const root = $('[data-screen="identity"]');
+    const nameIn = $('#player-name', root);
+    if (document.activeElement !== nameIn && nameIn.value !== id.name) nameIn.value = id.name;
+    const presets = CONFIG.goals.map(g => `<button class="goal" data-toggle="goals" data-value="${g.id}" aria-pressed="${id.goals.includes(g.id)}">
+        <svg viewBox="0 0 20 20" aria-hidden="true">${ICONS[g.id]}</svg><span>${g.label}</span></button>`).join('');
+    const customs = id.customGoals.map(g => `<div class="goal-custom">
+        <button class="goal" data-toggle="goals" data-value="${g.id}" aria-pressed="${id.goals.includes(g.id)}">
+          <svg viewBox="0 0 20 20" aria-hidden="true">${ICONS.custom}</svg><span>${esc(g.label)}</span></button>
+        <button class="goal-x" data-remove="${g.id}" aria-label="Remove ${esc(g.label)}">×</button></div>`).join('');
+    $('#goalGrid', root).innerHTML = presets + customs;
+    const items = goalItems(id);
+    $('#constellation', root).innerHTML = constellationSVG(items);
+    const out = {
+      goalCount: items.length ? `${items.length} selected` : '',
+      nameDisplay: id.name.trim() || 'Unnamed player',
+      starCount: items.length === 1 ? '1 goal' : `${items.length} goals`
+    };
+    $$('[data-out]', root).forEach(o => { if (o.dataset.out in out) o.textContent = out[o.dataset.out]; });
+    if (!$('#idError', root).hidden && this.validate(true)) $('#idError', root).hidden = true;
+  },
+  validate(quiet) {
+    const id = Store.get().identity;
+    let msg = '';
+    if (!id.name.trim()) msg = 'Give your player a name to continue.';
+    else if (!goalItems(id).length) msg = 'Choose at least one goal to continue.';
+    if (!quiet) {
+      const e = $('#idError'); e.textContent = msg; e.hidden = !msg;
+      if (msg && !id.name.trim()) $('#player-name').focus();
+    }
+    return !msg;
+  },
+  addCustom() {
+    const input = $('#custom-goal'); const err = $('#customError');
+    const label = input.value.trim().replace(/\s+/g, ' ');
+    const id = Store.get().identity;
+    let msg = '';
+    if (!label) msg = 'Type a goal first.';
+    else if (id.customGoals.length >= CONFIG.maxCustomGoals) msg = `You can add up to ${CONFIG.maxCustomGoals} goals of your own.`;
+    else if ([...CONFIG.goals, ...id.customGoals].some(g => g.label.toLowerCase() === label.toLowerCase())) msg = 'That goal is already on the list.';
+    err.textContent = msg; err.hidden = !msg;
+    if (msg) return;
+    const gid = 'c-' + Date.now().toString(36) + rnd(1000);
+    Store.update(s => { s.identity.customGoals.push({ id: gid, label }); s.identity.goals.push(gid); });
+    input.value = '';
+    input.focus();
+  }
+};
+
+Screens.summary = {
+  nav: { back: 'identity', next: null, hint: 'Saved on this device' },
+  mount(el) {
+    el.innerHTML = `
+      <header class="screen-head">
+        <h2>Your player is ready</h2>
+        <p class="lede">Everything is saved on this device. The world itself opens in the next chapter of the game.</p>
+      </header>
+      <div class="summary" id="summaryCard"></div>`;
+  },
+  sync(s) {
+    const c = s.character, id = s.identity;
+    const items = goalItems(id);
+    const temper = CONFIG.personality.map(p => lean(c.personality[p.id], p.left, p.right));
+    $('#summaryCard').innerHTML = `
+      <div class="avatar-stage">${avatarSVG(c, 's')}</div>
+      <div class="sum-body">
+        <div class="sum-head">
+          <div class="sum-portrait">${avatarSVG(c, 'p', 'face')}</div>
+          <div>
+          <p class="sum-name">${esc(id.name.trim() || 'Unnamed player')}</p>
+          <p class="hint">${c.height} cm · ${buildLabel(c.build)} build · ${c.hand === 'left' ? 'Left' : 'Right'}-handed · <span class="mono">${esc(c.genetics.code)}</span></p>
+          </div>
+        </div>
+        <div class="sum-sec"><h3>Goals</h3><div class="tags">${items.map(i => `<span>${esc(i.label)}</span>`).join('') || '<span>None yet</span>'}</div></div>
+        <div class="sum-sec"><h3>Temperament</h3><div class="tags">${temper.map(t => `<span>${t}</span>`).join('')}</div></div>
+        <div class="sum-sec"><h3>Traits</h3><div class="tags">${c.traits.map(t => `<span>${esc(t)}</span>`).join('') || '<span>None chosen</span>'}</div></div>
+        <div class="sum-sec"><h3>Genetics</h3><div class="sum-genes">${CONFIG.genetics.map(g => {
+          const v = c.genetics.values[g.id] || 0;
+          return `<div><span>${g.label} <b>${v}</b></span><div class="pips">${Array.from({ length: 10 }, (_, i) => `<i class="${i < v ? 'on' : ''}"></i>`).join('')}</div></div>`;
+        }).join('')}</div></div>
+        <div class="sum-links">
+          <button class="btn ghost small" data-go="character">Edit character</button>
+          <button class="btn ghost small" data-go="identity">Edit identity</button>
+        </div>
+      </div>`;
+  }
+};
+
+/* =========================================================
+   6. ROUTER — transitions, chrome, persistence of position
+   ========================================================= */
+const ORDER = ['intro', 'character', 'identity', 'summary'];
+const Router = {
+  current: null,
+  seq: 0,
+  go(id, opts = {}) {
+    if (!Screens[id] || id === this.current) return;
+    const my = ++this.seq;
+    const from = this.current;
+    const forward = ORDER.indexOf(id) >= ORDER.indexOf(from);
+    const prevEl = from && $(`[data-screen="${from}"]`);
+    const nextEl = $(`[data-screen="${id}"]`);
+    this.current = id;
+    Store.update(s => { s.screen = id; }, { silent: true });
+    Screens[id].sync && Screens[id].sync(Store.get());
+    const show = () => {
+      if (my !== this.seq) return;
+      $$('.screen').forEach(s => { if (s !== nextEl) { s.hidden = true; s.classList.remove('leave', 'enter-f', 'enter-b'); } });
+      nextEl.hidden = false;
+      nextEl.classList.remove('enter-f', 'enter-b', 'leave');
+      if (!opts.instant) { void nextEl.offsetWidth; nextEl.classList.add(forward ? 'enter-f' : 'enter-b'); }
+      this.chrome();
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      if (!opts.instant) nextEl.focus({ preventScroll: true });
+    };
+    if (prevEl && !opts.instant && !reducedMotion()) {
+      prevEl.classList.add('leave');
+      setTimeout(show, 190);
+    } else show();
+  },
+  chrome() {
+    const id = this.current;
+    const nav = Screens[id].nav;
+    $('#topbar').hidden = id === 'intro';
+    $('#navbar').hidden = !nav;
+    $('#app').classList.toggle('has-nav', !!nav);
+    const idx = ORDER.indexOf(id);
+    $$('#steps [data-step]').forEach(b => {
+      const i = ORDER.indexOf(b.dataset.step);
+      if (b.dataset.step === id || (id === 'summary' && b.dataset.step === 'identity')) b.setAttribute('aria-current', 'step');
+      else b.removeAttribute('aria-current');
+      b.dataset.done = i < idx;
+    });
+    if (nav) {
+      $('#navHint').textContent = nav.hint || '';
+      const next = $('#btnNext');
+      next.textContent = nav.next ? 'Continue' : 'Start over';
+      next.className = nav.next ? 'btn primary' : 'btn danger';
+      next.dataset.confirm = '';
+    }
+  },
+  next() {
+    const scr = Screens[this.current];
+    if (!scr.nav) return;
+    if (scr.nav.next) {
+      if (scr.validate && !scr.validate()) return;
+      this.go(scr.nav.next);
+    } else {
+      const btn = $('#btnNext');
+      if (btn.dataset.confirm === '1') {
+        btn.dataset.confirm = '';
+        Store.reset();
+        this.go('intro');
+      } else {
+        btn.dataset.confirm = '1';
+        btn.textContent = 'Tap again to erase';
+        clearTimeout(this._t);
+        this._t = setTimeout(() => { if (btn.dataset.confirm === '1') { btn.dataset.confirm = ''; btn.textContent = 'Start over'; } }, 3500);
+      }
+    }
+  },
+  back() { const nav = Screens[this.current].nav; if (nav && nav.back) this.go(nav.back); }
+};
+
+/* =========================================================
+   7. ACTIONS & EVENTS
+   ========================================================= */
+const Actions = {
+  randomize() {
+    Store.update(s => {
+      const c = s.character;
+      c.skin = rnd(CONFIG.skin.length);
+      c.face = pick(CONFIG.faceShapes).id;
+      c.hairStyle = pick(CONFIG.hairStyles).id;
+      c.hairColor = pick(CONFIG.hairColor).id;
+      c.eyeColor = rnd(CONFIG.eyeColor.length);
+      c.height = CONFIG.height.min + rnd(CONFIG.height.max - CONFIG.height.min + 1);
+      c.build = rnd(101);
+      c.hand = rnd(10) === 0 ? 'left' : 'right';
+      CONFIG.personality.forEach(p => { c.personality[p.id] = rnd(101); });
+      const pool = CONFIG.traits.slice(); c.traits = [];
+      while (c.traits.length < CONFIG.maxTraits) c.traits.push(pool.splice(rnd(pool.length), 1)[0]);
+    });
+  },
+  roll() { Store.update(s => { s.character.genetics = rollGenetics(); }); },
+  addGoal() { Screens.identity.addCustom(); }
+};
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-go],[data-tab],[data-view],[data-set],[data-toggle],[data-remove],[data-action]');
+  if (!t) return;
+  if (t.dataset.go) return Router.go(t.dataset.go);
+  if (t.dataset.tab) return Screens.character.selectTab(t.dataset.tab);
+  if (t.dataset.view) return Screens.character.setView(t.dataset.view);
+  if (t.dataset.set && t.dataset.value !== undefined) {
+    const v = t.hasAttribute('data-num') ? Number(t.dataset.value) : t.dataset.value;
+    return Store.update(s => setPath(s.character, t.dataset.set, v));
+  }
+  if (t.dataset.toggle === 'traits') {
+    const v = t.dataset.value;
+    return Store.update(s => {
+      const list = s.character.traits;
+      const i = list.indexOf(v);
+      if (i >= 0) list.splice(i, 1); else if (list.length < CONFIG.maxTraits) list.push(v);
+    });
+  }
+  if (t.dataset.toggle === 'goals') {
+    const v = t.dataset.value;
+    return Store.update(s => {
+      const list = s.identity.goals; const i = list.indexOf(v);
+      if (i >= 0) list.splice(i, 1); else list.push(v);
+    });
+  }
+  if (t.dataset.remove) {
+    const gid = t.dataset.remove;
+    return Store.update(s => {
+      s.identity.customGoals = s.identity.customGoals.filter(g => g.id !== gid);
+      s.identity.goals = s.identity.goals.filter(g => g !== gid);
+    });
+  }
+  if (t.dataset.action && Actions[t.dataset.action]) Actions[t.dataset.action]();
+});
+
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.matches('input[type=range][data-set]')) Store.update(s => setPath(s.character, t.dataset.set, Number(t.value)));
+  else if (t.id === 'player-name') Store.update(s => { s.identity.name = t.value; });
+  else if (t.id === 'custom-goal') { const er = $('#customError'); if (!er.hidden) er.hidden = true; }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.id === 'custom-goal') { e.preventDefault(); Actions.addGoal(); }
+  if (e.key === 'Enter' && e.target.id === 'player-name') { e.preventDefault(); $('#custom-goal').focus(); }
+  if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && e.target.matches('.tab')) {
+    const tabs = $$('[data-screen="character"] .tab');
+    const i = tabs.indexOf(e.target);
+    const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+    Screens.character.selectTab(n.dataset.tab); n.focus();
+  }
+});
+
+$('#btnNext').addEventListener('click', () => Router.next());
+$('#btnBack').addEventListener('click', () => Router.back());
+
+let savedT;
+document.addEventListener('life:saved', () => {
+  const el = $('#saved'); el.classList.add('pulse'); el.textContent = 'Saved';
+  clearTimeout(savedT); savedT = setTimeout(() => el.classList.remove('pulse'), 900);
+});
+
+/* =========================================================
+   8. SKY — photographic night sky: Milky Way, coloured stars,
+      scintillation, meteors and a mountain horizon
+   ========================================================= */
+function startSky() {
+  const cv = $('#sky'); const ctx = cv.getContext && cv.getContext('2d');
+  if (!ctx) return;
+  const still = reducedMotion();
+  // star colours by temperature: blue-white → white → yellow → orange
+  const TEMP = ['#9db4ff', '#b4c6ff', '#d6e0ff', '#f6f6ff', '#fff3e4', '#ffe4bf', '#ffcf98', '#ffb46b'];
+  let rand = Math.random;
+  const tint = () => { const r = rand(); return TEMP[r < .07 ? 0 : r < .2 ? 1 : r < .4 ? 2 : r < .62 ? 3 : r < .78 ? 4 : r < .9 ? 5 : r < .97 ? 6 : 7]; };
+  const gauss = () => { let u = 0, v = 0; while (!u) u = rand(); while (!v) v = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2832 * v); };
+  const rgba = (hex, a) => { const [r, g, b] = hex2rgb(hex); return `rgba(${r},${g},${b},${a})`; };
+  const sprites = {};
+  function sprite(col) {
+    if (sprites[col]) return sprites[col];
+    const s = document.createElement('canvas'); s.width = s.height = 64;
+    const g = s.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.07, rgba(col, .95)); gr.addColorStop(.2, rgba(col, .3));
+    gr.addColorStop(.5, rgba(col, .06)); gr.addColorStop(1, rgba(col, 0));
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    return (sprites[col] = s);
+  }
+  let w = 0, h = 0, dpr = 1, base = null, bright = [], meteors = [], nextMeteor = 0;
+
+  function ridge(amp, baseY) {
+    const ph = Array.from({ length: 5 }, () => rand() * 6.28);
+    const fq = [.0036, .0095, .024, .061, .14];
+    const wt = [.5, .26, .13, .07, .04];
+    return x => baseY - amp * (.5 + fq.reduce((s, f, i) => s + wt[i] * Math.sin(x * f + ph[i]), 0));
+  }
+
+  function build() {
+    rand = seeded(20261109);
+    base = document.createElement('canvas'); base.width = cv.width; base.height = cv.height;
+    const g = base.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const hz = h * .9;
+    // 1. sky gradient, airglow and a faint light dome on the horizon
+    const sky = g.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, '#02050c'); sky.addColorStop(.45, '#050b19'); sky.addColorStop(.8, '#0b1529'); sky.addColorStop(1, '#17213b');
+    g.fillStyle = sky; g.fillRect(0, 0, w, h);
+    const ag = g.createLinearGradient(0, hz - h * .32, 0, hz);
+    ag.addColorStop(0, 'rgba(40,80,90,0)'); ag.addColorStop(.75, 'rgba(46,92,100,.09)'); ag.addColorStop(1, 'rgba(130,100,110,.17)');
+    g.fillStyle = ag; g.fillRect(0, hz - h * .32, w, h * .32 + 2);
+    const lp = g.createRadialGradient(w * .8, h, 0, w * .8, h, Math.max(w, h) * .55);
+    lp.addColorStop(0, 'rgba(160,115,110,.15)'); lp.addColorStop(1, 'rgba(160,115,110,0)');
+    g.fillStyle = lp; g.fillRect(0, 0, w, h);
+
+    // 2. Milky Way band, lower-left → upper-right
+    const diag = Math.hypot(w, h), ang = Math.atan2(-h * .95, w * .9);
+    const ox = w * .02, oy = h * .98, ux = Math.cos(ang), uy = Math.sin(ang), nx = -uy, ny = ux;
+    const bw = Math.max(120, diag * .17);
+    const at = (t, off) => [ox + ux * t * diag + nx * off, oy + uy * t * diag + ny * off];
+    g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 360; i++) {
+      const t = rand() * 1.25 - .1, [x, y] = at(t, gauss() * bw * .32);
+      const core = Math.exp(-Math.pow((t - .3) / .16, 2));
+      const r = bw * (.16 + rand() * .4) * (1 + core * .5);
+      const col = rand() < .25 + core * .5 ? '236,214,188' : '168,186,232';
+      const a = (.007 + rand() * .01) * (1 + core * 1.4);
+      const rg = g.createRadialGradient(x, y, 0, x, y, r);
+      rg.addColorStop(0, `rgba(${col},${a})`); rg.addColorStop(1, `rgba(${col},0)`);
+      g.fillStyle = rg; g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    const nb = Math.round(Math.min(6000, w * h / 200));
+    for (let i = 0; i < nb; i++) {
+      const [x, y] = at(rand() * 1.25 - .1, gauss() * bw * .27);
+      const sz = .35 + rand() * .6;
+      g.fillStyle = rgba(tint(), .08 + rand() * .36); g.fillRect(x, y, sz, sz);
+    }
+    g.globalCompositeOperation = 'source-over';
+    for (let i = 0; i < 170; i++) {           // dark dust lanes along the core
+      const t = rand() * 1.2 - .05, [x, y] = at(t, (gauss() * .11 + Math.sin(t * 9) * .08) * bw);
+      const r = bw * (.05 + rand() * .15);
+      g.save(); g.translate(x, y); g.rotate(ang + (rand() - .5) * .5); g.scale(2.6, 1);
+      const rg = g.createRadialGradient(0, 0, 0, 0, 0, r), a = .1 + rand() * .15;
+      rg.addColorStop(0, `rgba(3,5,12,${a})`); rg.addColorStop(1, 'rgba(3,5,12,0)');
+      g.fillStyle = rg; g.fillRect(-r, -r, r * 2, r * 2); g.restore();
+    }
+
+    // 3. field stars, magnitude follows a power law (many faint, few bright)
+    const nf = Math.round(Math.min(3200, w * h / 650));
+    for (let i = 0; i < nf; i++) {
+      const x = rand() * w, y = rand() * hz, m = Math.pow(rand(), 3.2);
+      const r = .3 + m * 1.05;
+      g.fillStyle = rgba(tint(), .22 + m * .65);
+      if (r < .6) g.fillRect(x, y, r * 1.3, r * 1.3); else { g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.fill(); }
+    }
+
+    // 4. horizon: hazy far range, mist, near ridge with conifers
+    const far = ridge(h * .075, hz), near = ridge(h * .05, h * .985);
+    g.beginPath(); g.moveTo(0, h);
+    for (let x = 0; x <= w + 3; x += 3) g.lineTo(x, far(x));
+    g.lineTo(w, h); g.closePath();
+    const fg = g.createLinearGradient(0, hz - h * .1, 0, h); fg.addColorStop(0, '#0e1729'); fg.addColorStop(1, '#070b16');
+    g.fillStyle = fg; g.fill();
+    const mist = g.createLinearGradient(0, hz - h * .05, 0, hz + h * .05);
+    mist.addColorStop(0, 'rgba(70,92,130,0)'); mist.addColorStop(.6, 'rgba(70,92,130,.12)'); mist.addColorStop(1, 'rgba(70,92,130,0)');
+    g.fillStyle = mist; g.fillRect(0, hz - h * .06, w, h * .11);
+    for (let i = 0; i < Math.round(w / 260); i++) {   // a few distant lights
+      const x = rand() * w, y = far(x) + 4 + rand() * h * .03;
+      g.fillStyle = 'rgba(255,196,130,.55)'; g.fillRect(x, y, 1.2, 1.2);
+      g.drawImage(sprite('#ffc68a'), x - 4, y - 4, 9, 9);
+    }
+    g.beginPath(); g.moveTo(0, h);
+    for (let x = 0; x <= w + 2; x += 2) g.lineTo(x, near(x));
+    g.lineTo(w, h); g.closePath(); g.fillStyle = '#020309'; g.fill();
+    for (let x = rand() * 12; x < w; x += 4 + rand() * 16) {
+      if (rand() < .35) continue;
+      const y = near(x) + 1, th = 6 + rand() * 18, tw = th * (.22 + rand() * .1);
+      g.beginPath(); g.moveTo(x - tw, y);
+      for (let k = 1; k <= 4; k++) { const yy = y - th * k / 4.4, ww = tw * (1 - k / 4.6); g.lineTo(x - ww * 1.25, yy + th * .06); g.lineTo(x - ww * .5, yy); }
+      g.lineTo(x, y - th);
+      for (let k = 4; k >= 1; k--) { const yy = y - th * k / 4.4, ww = tw * (1 - k / 4.6); g.lineTo(x + ww * .5, yy); g.lineTo(x + ww * 1.25, yy + th * .06); }
+      g.lineTo(x + tw, y); g.closePath(); g.fill();
+    }
+
+    // stars that visibly twinkle (stronger near the horizon, as through more air)
+    const nbr = Math.round(Math.min(150, w * h / 9000));
+    bright = Array.from({ length: nbr }, () => {
+      const m = Math.pow(rand(), 2.4);
+      return { x: rand() * w, y: rand() * (hz - h * .1), size: 5 + m * 17, a: .35 + m * .6, col: tint(),
+        f1: .0011 + rand() * .0026, f2: .0031 + rand() * .005, p: rand() * 6.28 };
+    });
+  }
+
+  function resize() {
+    dpr = Math.min(1.5, window.devicePixelRatio || 1);
+    w = innerWidth; h = innerHeight;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    build();
+    frame(performance.now());
+  }
+
+  function frame(t) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    ctx.drawImage(base, 0, 0, w, h);
+    ctx.globalCompositeOperation = 'lighter';
+    for (const s of bright) {
+      const k = s.y / h, amp = .18 + .5 * k * k;
+      const tw = still ? 1 : 1 - amp * (.5 + .5 * Math.sin(t * s.f1 + s.p) * Math.sin(t * s.f2 + s.p * 1.7));
+      ctx.globalAlpha = s.a * tw;
+      const z = s.size * (.85 + .15 * tw);
+      ctx.drawImage(sprite(s.col), s.x - z / 2, s.y - z / 2, z, z);
+    }
+    if (!still) {
+      if (t > nextMeteor) {
+        meteors.push({ x: w * (.25 + Math.random() * .75), y: h * Math.random() * .4, ang: Math.PI * (.7 + Math.random() * .14),
+          v: .5 + Math.random() * .6, len: 90 + Math.random() * 150, life: 650 + Math.random() * 700, t0: t });
+        nextMeteor = t + 7000 + Math.random() * 11000;
+      }
+      meteors = meteors.filter(m => t - m.t0 < m.life);
+      for (const m of meteors) {
+        const age = t - m.t0, k = age / m.life, al = Math.sin(Math.PI * k);
+        const hx = m.x + Math.cos(m.ang) * m.v * age, hy = m.y + Math.sin(m.ang) * m.v * age;
+        const L = m.len * Math.min(1, age / 220);
+        const tx = hx - Math.cos(m.ang) * L, ty = hy - Math.sin(m.ang) * L;
+        const gr = ctx.createLinearGradient(hx, hy, tx, ty);
+        gr.addColorStop(0, `rgba(255,255,255,${.9 * al})`); gr.addColorStop(.25, `rgba(200,218,255,${.45 * al})`); gr.addColorStop(1, 'rgba(200,218,255,0)');
+        ctx.globalAlpha = 1; ctx.strokeStyle = gr; ctx.lineWidth = 1.3; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.globalAlpha = al; ctx.drawImage(sprite('#e6eeff'), hx - 6, hy - 6, 12, 12);
+      }
+    }
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  }
+
+  let last = 0;
+  function loop(t) {
+    if (!document.hidden && t - last > 33) { frame(t); last = t; }
+    requestAnimationFrame(loop);
+  }
+  let rt, lastW = 0, lastH = 0;
+  addEventListener('resize', () => {
+    clearTimeout(rt);
+    rt = setTimeout(() => {   // ignore small height jitter from mobile browser toolbars
+      if (innerWidth !== lastW || Math.abs(innerHeight - lastH) > 120) { lastW = innerWidth; lastH = innerHeight; resize(); }
+    }, 150);
+  });
+  lastW = innerWidth; lastH = innerHeight;
+  resize();
+  nextMeteor = performance.now() + 2500;
+  if (!still) requestAnimationFrame(loop);
+}
+
+/* =========================================================
+   9. BOOT
+   ========================================================= */
+ORDER.forEach(id => Screens[id].mount($(`[data-screen="${id}"]`)));
+Store.subscribe(s => {
+  ORDER.forEach(id => { if (Screens[id].sync && id !== 'summary') Screens[id].sync(s); });
+  if (Router.current === 'summary') Screens.summary.sync(s);
+});
+ORDER.forEach(id => { if (Screens[id].sync && id !== 'summary') Screens[id].sync(Store.get()); });
+let start = Store.get().screen;
+if (!ORDER.includes(start)) start = 'intro';
+if (start === 'summary' && !Screens.identity.validate(true)) start = 'identity';
+Router.go(start, { instant: true });
+startSky();
+})();
+</script>
+
+</body></html>
