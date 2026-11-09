@@ -1,0 +1,113 @@
+import type { Alert, Milestone } from '../types';
+
+/** Sample academic calendar (illustrative). */
+export const milestones: (Milestone & { courseId?: string })[] = [
+  {
+    id: 'm-proposal',
+    date: '2026-11-18',
+    title: 'Final project proposal due',
+    description: 'Submit the Part A proposal to your project supervisor.',
+    type: 'deadline',
+    courseId: 'PRJ401',
+  },
+  {
+    id: 'm-reg-open',
+    date: '2026-11-24',
+    title: 'Spring 2027 registration opens',
+    description: 'Priority window for final-year students. High-demand courses fill quickly.',
+    type: 'registration',
+    href: '/plan',
+  },
+  {
+    id: 'm-reg-close',
+    date: '2026-12-06',
+    title: 'Priority registration closes',
+    description: 'After this date, remaining seats open to all students.',
+    type: 'registration',
+    href: '/plan',
+  },
+  {
+    id: 'm-exam-os',
+    date: '2027-01-24',
+    title: 'Operating Systems — final exam',
+    description: 'Moed A · 09:00 · 3 hours.',
+    type: 'exam',
+    courseId: 'CS310',
+  },
+  {
+    id: 'm-exam-ml',
+    date: '2027-01-31',
+    title: 'Machine Learning — final exam',
+    description: 'Moed A · 13:00 · 3 hours.',
+    type: 'exam',
+    courseId: 'CS410',
+  },
+  {
+    id: 'm-spring',
+    date: '2027-03-07',
+    title: 'Spring 2027 semester begins',
+    description: 'Your final planned semester.',
+    type: 'academic',
+    href: '/plan',
+  },
+  {
+    id: 'm-grad',
+    date: '2027-06-25',
+    title: 'Expected graduation',
+    description: 'Once every requirement is complete.',
+    type: 'graduation',
+    href: '/degree',
+  },
+];
+
+/** Static notifications. Plan-related alerts are generated from the live plan in src/lib/alerts.ts. */
+export const staticAlerts: Alert[] = [
+  {
+    id: 'a-reg',
+    date: '2026-11-09',
+    title: 'Spring registration opens in 15 days',
+    body: 'Your registration window opens Nov 24 at 09:00. Review your Spring 2027 plan before then.',
+    severity: 'warning',
+    category: 'deadline',
+    actionLabel: 'Review plan',
+    href: '/plan',
+  },
+  {
+    id: 'a-ethics',
+    date: '2026-11-05',
+    title: 'Ethics in Computing — essay graded',
+    body: 'Your first essay received 92. It counts for 20% of the final grade.',
+    severity: 'success',
+    category: 'grade',
+    actionLabel: 'View course',
+    href: '/requirements?course=GEN210',
+  },
+  {
+    id: 'a-proposal',
+    date: '2026-11-03',
+    title: 'Final project proposal due Nov 18',
+    body: 'Submit your Part A proposal to Dr. Shira Alon. A template is available from your supervisor.',
+    severity: 'info',
+    category: 'deadline',
+    actionLabel: 'View course',
+    href: '/requirements?course=PRJ401',
+  },
+  {
+    id: 'a-adddrop',
+    date: '2026-10-30',
+    title: 'Add/drop period has ended',
+    body: 'Changes to Fall 2026 courses now require advisor approval.',
+    severity: 'info',
+    category: 'system',
+  },
+  {
+    id: 'a-audit',
+    date: '2026-10-20',
+    title: 'Degree audit updated',
+    body: 'Spring 2026 grades were added to your record.',
+    severity: 'success',
+    category: 'system',
+    actionLabel: 'Open My Degree',
+    href: '/degree',
+  },
+];

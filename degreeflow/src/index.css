@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens. Light values live on :root; dark values apply when the OS prefers dark
+ * (unless the user forced light) and whenever the user explicitly picks dark.
+ * Each token is an "R G B" triple so Tailwind can apply alpha: bg-surface/80, border-line/60 …
+ */
+:root {
+  color-scheme: light;
+  --canvas: 245 247 251;
+  --sidebar: 250 251 253;
+  --surface: 255 255 255;
+  --raised: 243 245 250;
+  --line: 228 232 240;
+  --line-strong: 206 213 226;
+  --fg: 12 17 32;
+  --muted: 78 89 113;
+  --subtle: 122 133 156;
+  --accent: 8 145 178;
+  --accent-fg: 255 255 255;
+  --violet: 124 58 237;
+  --success: 5 150 105;
+  --warning: 196 113 4;
+  --danger: 220 38 38;
+  --chart-1: 8 145 178;
+  --chart-2: 124 58 237;
+  --chart-3: 203 211 225;
+  --highlight: 255 255 255;
+  --shadow-a: 0.05;
+  --glow-a: 0.07;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --canvas: 6 9 18;
+    --sidebar: 8 12 23;
+    --surface: 12 17 31;
+    --raised: 19 25 43;
+    --line: 29 36 56;
+    --line-strong: 44 54 80;
+    --fg: 236 240 248;
+    --muted: 152 163 188;
+    --subtle: 102 114 142;
+    --accent: 34 211 238;
+    --accent-fg: 3 16 24;
+    --violet: 167 139 250;
+    --success: 52 211 153;
+    --warning: 251 191 36;
+    --danger: 248 113 113;
+    --chart-1: 10 165 192;
+    --chart-2: 139 92 246;
+    --chart-3: 51 63 92;
+    --highlight: 255 255 255;
+    --shadow-a: 0.35;
+    --glow-a: 0.1;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --canvas: 6 9 18;
+  --sidebar: 8 12 23;
+  --surface: 12 17 31;
+  --raised: 19 25 43;
+  --line: 29 36 56;
+  --line-strong: 44 54 80;
+  --fg: 236 240 248;
+  --muted: 152 163 188;
+  --subtle: 102 114 142;
+  --accent: 34 211 238;
+  --accent-fg: 3 16 24;
+  --violet: 167 139 250;
+  --success: 52 211 153;
+  --warning: 251 191 36;
+  --danger: 248 113 113;
+  --chart-1: 10 165 192;
+  --chart-2: 139 92 246;
+  --chart-3: 51 63 92;
+  --highlight: 255 255 255;
+  --shadow-a: 0.35;
+  --glow-a: 0.1;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-canvas font-sans text-fg antialiased;
+    font-feature-settings: 'ss01', 'cv11';
+    text-rendering: optimizeLegibility;
+    background-image:
+      radial-gradient(60rem 28rem at 85% -10%, rgb(var(--violet) / var(--glow-a)), transparent 60%),
+      radial-gradient(50rem 24rem at 20% -12%, rgb(var(--accent) / var(--glow-a)), transparent 60%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+    min-height: 100vh;
+  }
+  ::selection {
+    background: rgb(var(--accent) / 0.25);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--line-strong)) transparent;
+  }
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent) / 0.7);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-surface shadow-card;
+  }
+  .card-interactive {
+    @apply transition-[border-color,background-color,transform,box-shadow] duration-200 hover:border-line-strong hover:bg-raised/40;
+  }
+  .eyebrow {
+    @apply text-2xs font-medium uppercase tracking-[0.08em] text-subtle;
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  .hatch {
+    background-image: repeating-linear-gradient(
+      135deg,
+      rgb(var(--muted) / 0.35) 0 2px,
+      transparent 2px 6px
+    );
+  }
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-raised;
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full animate-shimmer;
+    background: linear-gradient(90deg, transparent, rgb(var(--highlight) / 0.06), transparent);
+  }
+  .divider {
+    @apply h-px w-full bg-line;
+  }
+  .gradient-text {
+    background: linear-gradient(100deg, rgb(var(--accent)), rgb(var(--violet)));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
