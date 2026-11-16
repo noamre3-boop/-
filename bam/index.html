@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BY ANY MEANS</title>
+<meta name="description" content="Rotation, sketchbook, garage, beats. By any means necessary.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Permanent+Marker&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+
+<!-- phone status bar -->
+<header class="status">
+  <div class="status-l">
+    <span id="clock">9:05</span>
+    <span class="pill"><b>MUN</b> <span id="score">1-0</span> <b>BEN</b></span>
+  </div>
+  <nav class="nav">
+    <a href="#rotation">Rotation</a>
+    <a href="#fit">Fit</a>
+    <a href="#sketch">Sketch</a>
+    <a href="#garage">Garage</a>
+    <a href="#studio">Studio</a>
+    <a href="#gym">Gym</a>
+  </nav>
+  <div class="status-r">
+    <button class="bag" id="bagBtn" aria-label="Bag">BAG <span id="bagCount">0</span></button>
+    <span class="sig">5G</span>
+    <span class="bat"><span id="bat">24</span></span>
+  </div>
+</header>
+
+<!-- hero -->
+<section class="hero">
+  <div class="scrawl" aria-hidden="true"></div>
+  <div class="hero-inner">
+    <p class="kicker">// drop 001 — winter '26</p>
+    <h1 class="mega">
+      <span class="line">BY ANY</span>
+      <span class="line">MEANS<span class="peace">✌</span></span>
+    </h1>
+    <p class="marker big">necessary.</p>
+    <p class="lede">Air bubbles, tech fleece, duck canvas, a sketchbook full of guts and a black coupe idling outside. Everything on this page is the rotation.</p>
+    <div class="cta">
+      <a class="btn red" href="#rotation">Shop the rotation</a>
+      <a class="btn ghost" href="#studio">▶ Go crazy</a>
+    </div>
+  </div>
+  <figure class="hero-sticker">
+    <img src="img/tn.jpg" alt="Black, grey and red air-bubble sneakers on a shoebox">
+    <figcaption class="tape">EST. 1982</figcaption>
+  </figure>
+  <span class="badge b1">NO. 7</span>
+  <span class="badge b2">FLASH ON</span>
+</section>
+
+<div class="ticker" aria-hidden="true">
+  <div class="track">
+    <span>TN ✦ GEL ✦ TECH FLEECE ✦ SHARK FULL-ZIP ✦ DUCK CANVAS ✦ NUMBER 7 ✦ GO CRAZY ✦ SUPER SAIYAN ✦ MIRROR FLASH ✦ </span>
+    <span>TN ✦ GEL ✦ TECH FLEECE ✦ SHARK FULL-ZIP ✦ DUCK CANVAS ✦ NUMBER 7 ✦ GO CRAZY ✦ SUPER SAIYAN ✦ MIRROR FLASH ✦ </span>
+  </div>
+</div>
+
+<!-- rotation -->
+<section id="rotation" class="section">
+  <div class="head">
+    <h2 class="h2">THE ROTATION</h2>
+    <p class="marker sub">what's on feet &amp; back this week</p>
+  </div>
+  <div class="grid" id="products"></div>
+</section>
+
+<!-- fit builder -->
+<section id="fit" class="section dark">
+  <div class="head">
+    <h2 class="h2">FIT BUILDER</h2>
+    <p class="marker sub">pick one of each. we rate the drip.</p>
+  </div>
+  <div class="fit">
+    <div class="fit-picks" id="fitPicks"></div>
+    <div class="fit-card" id="fitCard">
+      <p class="mono small">FIT #<span id="fitNo">0001</span></p>
+      <h3 class="fit-name" id="fitName">—</h3>
+      <div class="meter"><div class="meter-fill" id="meter"></div></div>
+      <p class="mono"><span id="dripScore">0</span>/100 DRIP</p>
+      <p class="fit-verdict marker" id="fitVerdict">pick the pieces</p>
+      <button class="btn red" id="shuffle">Shuffle fit</button>
+    </div>
+  </div>
+</section>
+
+<!-- sketchbook -->
+<section id="sketch" class="section sketch-sec">
+  <div class="sketch-copy">
+    <h2 class="h2">SKETCHBOOK</h2>
+    <p class="marker sub">graphite, 3am, no undo.</p>
+    <p class="body">Pencil studies that end up on tees. Anatomy, but the inside kind. This one went up on the story five minutes after the last line and got screen-recorded more than any fit pic.</p>
+    <ul class="specs">
+      <li><span>Medium</span><b>HB + 4B graphite</b></li>
+      <li><span>Time</span><b>~2 hrs</b></li>
+      <li><span>Status</span><b>Tee print, coming soon</b></li>
+    </ul>
+  </div>
+  <div class="story">
+    <div class="story-bar"><i id="storyProg"></i></div>
+    <div class="story-top">
+      <span class="avatar"></span><b>studio</b><span class="tick">✓</span><span class="ago">5m</span>
+    </div>
+    <img src="img/sketch.jpg" alt="Pencil drawing of a long-haired figure holding their own intestines">
+    <div class="story-actions">
+      <button data-act="like">♡<small>Like</small></button>
+      <button data-act="share">↗<small>Share</small></button>
+      <button data-act="boost">⤴<small>Boost</small></button>
+      <button data-act="save">✦<small>Highlight</small></button>
+    </div>
+    <p class="story-toast" id="storyToast"></p>
+  </div>
+</section>
+
+<!-- garage -->
+<section id="garage" class="section garage">
+  <div class="head">
+    <h2 class="h2">GARAGE</h2>
+    <p class="marker sub">black on black on black.</p>
+  </div>
+  <div class="garage-wrap">
+    <figure class="car">
+      <img src="img/vette.jpg" alt="Black sports coupe with gold brake calipers parked on a driveway">
+      <span class="plate">BYANY·7</span>
+    </figure>
+    <div class="dash">
+      <div class="gauge"><span class="g-num" id="rpm">0</span><span class="g-lbl">RPM</span></div>
+      <ul class="specs">
+        <li><span>Engine</span><b>6.2L supercharged V8</b></li>
+        <li><span>0–100</span><b>3.0 s</b></li>
+        <li><span>Calipers</span><b>Gold, obviously</b></li>
+        <li><span>Daily</span><b>Maroon '98 sedan, chrome rims</b></li>
+      </ul>
+      <button class="btn red" id="rev">Hold to rev</button>
+    </div>
+  </div>
+</section>
+
+<!-- studio -->
+<section id="studio" class="section dark">
+  <div class="head">
+    <h2 class="h2">STUDIO</h2>
+    <p class="marker sub">142 bpm. sliding 808s. made in your browser.</p>
+  </div>
+  <div class="player">
+    <div class="cover"><span>GO<br>CRAZY</span></div>
+    <div class="player-main">
+      <p class="mono small">NOW PLAYING</p>
+      <h3 class="track-name" id="trackName">Go Crazy (Drop 001 Freestyle)</h3>
+      <p class="mono dim">BY ANY MEANS · prod. by the tab you're in</p>
+      <div class="bars" id="bars"></div>
+      <div class="controls">
+        <button class="play" id="play" aria-label="Play">▶</button>
+        <div class="pads" id="pads"></div>
+      </div>
+    </div>
+  </div>
+  <ol class="tracklist" id="tracklist"></ol>
+</section>
+
+<!-- gym -->
+<section id="gym" class="section gym">
+  <div class="head">
+    <h2 class="h2">DISCIPLINE</h2>
+    <p class="marker sub">side profile check, every monday.</p>
+  </div>
+  <div class="gym-wrap">
+    <ul class="checks" id="checks"></ul>
+    <div class="streak">
+      <p class="mono small">TODAY</p>
+      <p class="streak-num"><span id="doneCount">0</span>/<span id="totalCount">0</span></p>
+      <p class="marker" id="gymMsg">get up.</p>
+      <button class="btn ghost" id="resetGym">Reset day</button>
+    </div>
+  </div>
+</section>
+
+<!-- mood -->
+<section class="section mood">
+  <div class="head">
+    <h2 class="h2">MOODBOARD</h2>
+    <p class="marker sub">everything that made this page.</p>
+  </div>
+  <div class="tiles">
+    <div class="tile t-red"><b>'07 AWAY</b><span>black kit, red piping, the sleeve-grip era</span></div>
+    <div class="tile t-orange"><b>SAIYAN</b><span>spiky hair, orange gi, box logo tee</span></div>
+    <div class="tile t-olive"><b>DUCK CANVAS</b><span>faded green, backpack straps, peace sign</span></div>
+    <div class="tile t-gray"><b>MIRROR FLASH</b><span>bathroom tiles, wired earbuds, bangs</span></div>
+    <div class="tile t-camo"><b>CAMO HOOD</b><span>red camo lining under a black puffer</span></div>
+    <div class="tile t-cream"><b>CROWN FILTER</b><span>gold crown, pink wand, no expression</span></div>
+    <div class="tile t-blue"><b>NO. 7</b><span>shhh to the away end</span></div>
+    <div class="tile t-paper"><b>CARTOON HANDS</b><span>floating limbs, big grin, ✌</span></div>
+  </div>
+</section>
+
+<footer class="foot">
+  <p class="mega small-mega">BY ANY MEANS</p>
+  <p class="marker">necessary.</p>
+  <p class="mono dim">© 2026 · drop 001 · all pieces shown are from a personal rotation</p>
+</footer>
+
+<!-- bag drawer -->
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head"><h3>YOUR BAG</h3><button id="closeBag" aria-label="Close">✕</button></div>
+  <ul id="bagList"></ul>
+  <p class="total">TOTAL <b id="bagTotal">₪0</b></p>
+  <button class="btn red wide" id="checkout">Checkout</button>
+</aside>
+
+<script src="script.js"></script>
+</body>
+</html>
